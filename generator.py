@@ -271,9 +271,9 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
     output = None
     for attempt in range(max_retries):
         try:
-            # thudm/cogvideox-t2v
-            output = replicate.run(
-                "thudm/cogvideox-t2v:e047b1d734c550671fb4de7f7df7f9341ed498b4aa7cd88b82533b60dfec33e3",
+            # Create prediction asynchronously to avoid read timeouts on long cold-starts
+            prediction = replicate.predictions.create(
+                version="e047b1d734c550671fb4de7f7df7f9341ed498b4aa7cd88b82533b60dfec33e3",
                 input={
                     "prompt": prompt,
                     "num_frames": 49,
@@ -281,13 +281,28 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
                     "num_inference_steps": 50
                 }
             )
-            break
+            
+            # Poll status up to 3 minutes (180s)
+            import time
+            start_poll = time.time()
+            while prediction.status not in ["succeeded", "failed", "canceled"]:
+                if time.time() - start_poll > 180:
+                    raise TimeoutError("CogVideoX prediction timed out after 3 minutes.")
+                time.sleep(3)
+                prediction.reload()
+                
+            if prediction.status == "succeeded":
+                output = prediction.output
+                break
+            else:
+                raise RuntimeError(f"Prediction failed with status: {prediction.status}")
         except Exception as e:
             error_msg = str(e)
             is_429 = "429" in error_msg or "throttled" in error_msg.lower()
             if is_429 and attempt < max_retries - 1:
                 wait_time = 15 + attempt * 5
                 print(f"Replicate rate limit hit. Waiting {wait_time}s before retry (Attempt {attempt+1}/{max_retries})...")
+                import time
                 time.sleep(wait_time)
             else:
                 print(f"Replicate video generation failed ({e}). Falling back to static image...")
