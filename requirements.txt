@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+edge-tts
+replicate
+google-genai
+moviepy
+python-dotenv
+pillow
+jinja2
+pydantic
