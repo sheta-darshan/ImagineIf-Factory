@@ -632,13 +632,13 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                         from moviepy.audio.fx.all import volumex
                         bg_clip_ducked = bg_clip_looped.fx(volumex, 0.12)
                     except Exception:
-                        bg_clip_ducked = bg_clip_looped.multiply_volume_by(0.12)
+                        bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
             else:
                 try:
                     from moviepy.audio.fx.all import volumex
                     bg_clip_ducked = bg_clip_looped.fx(volumex, 0.12)
                 except Exception:
-                    bg_clip_ducked = bg_clip_looped.multiply_volume_by(0.12)
+                    bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
                 
             # Mix music with narration audio
             mixed_audio = CompositeAudioClip([final_clip.audio, bg_clip_ducked])

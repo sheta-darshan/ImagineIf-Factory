@@ -31,7 +31,7 @@ def merge_pitch_video(video_path, output_path="final_pitch_submission.mp4"):
             print(f"Warning: AudioLoop failed ({e}), using raw clip.")
             bg_clip_looped = bg_clip
             
-        bg_clip_ducked = bg_clip_looped.multiply_volume_by(0.12)
+        bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
         
         # Merge voiceover with BGM
         final_audio = CompositeAudioClip([voice_clip, bg_clip_ducked])
