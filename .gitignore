@@ -7,3 +7,9 @@ temp-audio.m4a
 .system_generated/
 .tempmediaStorage/
 *.log
+.concept_video.mp4
+.final_pitch_submission.mp4
+.pitch_video.mp4
+.pitch_audio.m4a
+.voiceover.mp3
+content_calendar_365.md
