@@ -227,18 +227,26 @@ async def api_generate_assets(req: AssetRequest):
         # 1. Generate Voiceover (async, completely parallel)
         voiceover_task = generator.generate_voiceover(seg.text_to_speak, audio_path)
         
-        # 2. Generate Image (queued sequentially using Semaphore)
+        # 2. Generate Visual Asset (queued sequentially using Semaphore)
         async def run_image_task():
             async with image_semaphore:
-                # Add a 10.0 second pause between image generations to stay within Replicate's 6/min rate limit (for accounts under $5.0)
+                # Add a 10.0 second pause between generations to stay within Replicate's 6/min rate limit
                 await asyncio.sleep(10.0)
-                return await asyncio.to_thread(
-                    generator.generate_image_replicate, 
-                    seg.visual_prompt, 
-                    image_path_raw,
-                    req.aspectRatio,
-                    req.imageModel
-                )
+                if req.imageModel == "video":
+                    return await asyncio.to_thread(
+                        generator.generate_video_replicate, 
+                        seg.visual_prompt, 
+                        image_path_raw,
+                        req.aspectRatio
+                    )
+                else:
+                    return await asyncio.to_thread(
+                        generator.generate_image_replicate, 
+                        seg.visual_prompt, 
+                        image_path_raw,
+                        req.aspectRatio,
+                        req.imageModel
+                    )
         
         # Run concurrently
         try:
@@ -293,21 +301,33 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
                 return audio_path
             tasks.append(dummy_voice())
             
-        # 2. Regenerate image if requested
+        # 2. Regenerate visual asset if requested
         if req.regenerateImage:
             async def run_image():
-                return await asyncio.to_thread(
-                    generator.generate_image_replicate,
-                    req.visualPrompt,
-                    image_path_raw,
-                    req.aspectRatio,
-                    req.imageModel
-                )
+                if req.imageModel == "video":
+                    return await asyncio.to_thread(
+                        generator.generate_video_replicate,
+                        req.visualPrompt,
+                        image_path_raw,
+                        req.aspectRatio
+                    )
+                else:
+                    return await asyncio.to_thread(
+                        generator.generate_image_replicate,
+                        req.visualPrompt,
+                        image_path_raw,
+                        req.aspectRatio,
+                        req.imageModel
+                    )
             tasks.append(run_image())
         else:
             async def dummy_image():
-                img_file = f"image_{req.segmentIndex}.jpg"
-                return f"{project_dir}/{img_file}"
+                # Search for existing file with mp4 or jpg extension
+                for ext in [".mp4", ".jpg"]:
+                    test_file = f"{project_dir}/image_{req.segmentIndex}{ext}"
+                    if os.path.exists(test_file):
+                        return test_file
+                return f"{project_dir}/image_{req.segmentIndex}.jpg"
             tasks.append(dummy_image())
             
         res_audio, res_image = await asyncio.gather(*tasks)
@@ -317,11 +337,7 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
         else:
             actual_audio_path = f"outputs/{project_id}/{audio_filename}"
             
-        if req.regenerateImage:
-            actual_image_path = f"outputs/{project_id}/{os.path.basename(res_image)}"
-        else:
-            img_file = f"image_{req.segmentIndex}.jpg"
-            actual_image_path = f"outputs/{project_id}/{img_file}"
+        actual_image_path = f"outputs/{project_id}/{os.path.basename(res_image)}"
             
         return {
             "text_to_speak": req.textToSpeak,

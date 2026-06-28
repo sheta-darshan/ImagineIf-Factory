@@ -573,6 +573,7 @@
                     <select id="model-select">
                         <option value="schnell">Speed (Flux Schnell - Fast/Cheap)</option>
                         <option value="dev">Quality (Flux Dev - Detailed/Realistic)</option>
+                        <option value="video">AI Video (CogVideoX - Dynamic)</option>
                     </select>
                 </div>
             </div>
@@ -995,7 +996,7 @@
                         </div>
 
                         <div class="segment-preview" id="preview-${idx}" style="display: none;">
-                            <div class="image-preview-container">
+                            <div class="image-preview-container" id="visual-prev-container-${idx}">
                                 <img src="" id="img-prev-${idx}">
                             </div>
                             <div class="audio-preview-container">
@@ -1061,11 +1062,17 @@
                 
                 // Update UI preview card elements
                 const prevDiv = document.getElementById(`preview-${index}`);
-                const img = document.getElementById(`img-prev-${index}`);
+                const visualContainer = document.getElementById(`visual-prev-container-${index}`);
                 const aud = document.getElementById(`aud-prev-${index}`);
                 
-                img.src = `/${updatedSeg.image_path}?t=${new Date().getTime()}`;
                 aud.src = `/${updatedSeg.audio_path}?t=${new Date().getTime()}`;
+                
+                if (updatedSeg.image_path.toLowerCase().endsWith(".mp4")) {
+                    visualContainer.innerHTML = `<video src="/${updatedSeg.image_path}?t=${new Date().getTime()}" controls style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"></video>`;
+                } else {
+                    visualContainer.innerHTML = `<img src="/${updatedSeg.image_path}?t=${new Date().getTime()}" id="img-prev-${index}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">`;
+                }
+                
                 prevDiv.style.display = "grid";
                 
                 // Adjust preview layout aspect ratio
@@ -1137,11 +1144,17 @@
 
                 currentSegments.forEach((seg, idx) => {
                     const prevDiv = document.getElementById(`preview-${idx}`);
-                    const img = document.getElementById(`img-prev-${idx}`);
+                    const visualContainer = document.getElementById(`visual-prev-container-${idx}`);
                     const aud = document.getElementById(`aud-prev-${idx}`);
 
-                    img.src = `/${seg.image_path}?t=${new Date().getTime()}`;
                     aud.src = `/${seg.audio_path}?t=${new Date().getTime()}`;
+                    
+                    if (seg.image_path.toLowerCase().endsWith(".mp4")) {
+                        visualContainer.innerHTML = `<video src="/${seg.image_path}?t=${new Date().getTime()}" controls style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"></video>`;
+                    } else {
+                        visualContainer.innerHTML = `<img src="/${seg.image_path}?t=${new Date().getTime()}" id="img-prev-${idx}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">`;
+                    }
+
                     prevDiv.style.display = "grid";
 
                     // Adjust image container preview aspect ratio dynamically

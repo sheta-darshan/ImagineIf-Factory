@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import edge_tts
-from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+from moviepy import ImageClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, VideoFileClip
 
 load_dotenv()
 
@@ -256,6 +256,69 @@ def generate_image_replicate(prompt: str, output_path: str, aspect_ratio: str = 
     except Exception as e:
         print(f"Replicate download/processing failed ({e}). Falling back to Pollinations.ai...")
         return generate_image_pollinations(prompt, output_path, aspect_ratio)
+
+def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = "16:9") -> str:
+    """
+    Generates a 4-second video clip using Replicate (thudm/cogvideox-t2v).
+    Falls back to a static image if it fails or Replicate is not configured.
+    """
+    token = os.getenv("REPLICATE_API_TOKEN")
+    if not token or "your_" in token.lower():
+        print("Replicate token not configured for video. Falling back to static image...")
+        return generate_image_replicate(prompt, output_path, aspect_ratio)
+        
+    max_retries = 3
+    output = None
+    for attempt in range(max_retries):
+        try:
+            # thudm/cogvideox-t2v
+            output = replicate.run(
+                "thudm/cogvideox-t2v:e047b1d734c550671fb4de7f7df7f9341ed498b4aa7cd88b82533b60dfec33e3",
+                input={
+                    "prompt": prompt,
+                    "num_frames": 49,
+                    "guidance_scale": 6.0,
+                    "num_inference_steps": 50
+                }
+            )
+            break
+        except Exception as e:
+            error_msg = str(e)
+            is_429 = "429" in error_msg or "throttled" in error_msg.lower()
+            if is_429 and attempt < max_retries - 1:
+                wait_time = 15 + attempt * 5
+                print(f"Replicate rate limit hit. Waiting {wait_time}s before retry (Attempt {attempt+1}/{max_retries})...")
+                time.sleep(wait_time)
+            else:
+                print(f"Replicate video generation failed ({e}). Falling back to static image...")
+                return generate_image_replicate(prompt, output_path, aspect_ratio)
+                
+    if not output:
+        print("Replicate video returned no output. Falling back to static image...")
+        return generate_image_replicate(prompt, output_path, aspect_ratio)
+        
+    try:
+        video_url = output
+        if isinstance(output, list):
+            video_url = output[0]
+            
+        if hasattr(video_url, "read"):
+            content = video_url.read()
+        else:
+            url_str = video_url.url if hasattr(video_url, "url") else str(video_url)
+            import httpx
+            response = httpx.get(url_str, timeout=45.0)
+            if response.status_code != 200:
+                raise RuntimeError(f"Failed to download video from {url_str}")
+            content = response.content
+            
+        mp4_path = os.path.splitext(output_path)[0] + ".mp4"
+        with open(mp4_path, "wb") as f:
+            f.write(content)
+        return mp4_path
+    except Exception as e:
+        print(f"Replicate video processing failed ({e}). Falling back to static image...")
+        return generate_image_replicate(prompt, output_path, aspect_ratio)
 
 def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> ImageClip:
     """
@@ -531,7 +594,7 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
 
 def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9", bg_music_path: str = None, font_name: str = "Arial Bold", highlight_color: str = "Yellow", caption_position: str = "Bottom", add_watermark: bool = False) -> str:
     """
-    Stitches generated audio and images together into a final MP4 video.
+    Stitches generated audio and visual assets (images or CogVideoX videos) together into a final MP4 video.
     """
     import random
     target_size = (1920, 1080) if aspect_ratio == "16:9" else (1080, 1920)
@@ -539,6 +602,7 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
     
     # Track speaking intervals for dynamic audio ducking
     speaking_intervals = []
+    clip_start_times = []
     curr_start = 0.0
     
     motion_types = ["zoom_in", "zoom_out", "pan_left", "pan_right"]
@@ -548,7 +612,7 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
         audio_path = seg.get("audio_path")
         
         if not img_path or not os.path.exists(img_path):
-            print(f"Skipping segment {i} due to missing image: {img_path}")
+            print(f"Skipping segment {i} due to missing visual asset: {img_path}")
             continue
             
         if not audio_path or not os.path.exists(audio_path):
@@ -557,10 +621,40 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             
         audio_clip = AudioFileClip(audio_path)
         duration = audio_clip.duration
+        clip_start_times.append(curr_start)
         
-        # Randomize camera movement type per segment for variety
-        motion_style = random.choice(motion_types)
-        img_clip = create_ken_burns_clip(img_path, duration, target_size=target_size, motion_type=motion_style)
+        is_video_asset = img_path.lower().endswith(".mp4")
+        if is_video_asset:
+            try:
+                # Load, scale, and center-crop video clip to target size
+                video_segment = VideoFileClip(img_path)
+                seg_w, seg_h = video_segment.size
+                scale_factor = max(target_size[0] / seg_w, target_size[1] / seg_h)
+                resized_video = video_segment.resized((int(seg_w * scale_factor), int(seg_h * scale_factor)))
+                
+                cropped_video = resized_video.cropped(
+                    x_center=resized_video.w / 2,
+                    y_center=resized_video.h / 2,
+                    width=target_size[0],
+                    height=target_size[1]
+                )
+                
+                # Loop or trim to fit speech duration
+                if cropped_video.duration < duration:
+                    try:
+                        from moviepy.video.fx.Loop import Loop
+                        img_clip = cropped_video.with_effects([Loop(duration=duration)])
+                    except Exception:
+                        img_clip = cropped_video.loop(duration=duration)
+                else:
+                    img_clip = cropped_video.subclipped(0, duration)
+            except Exception as ve:
+                print(f"Warning: Failed to load video asset {img_path} ({ve}). Falling back to blank canvas.")
+                img_clip = create_ken_burns_clip(None, duration, target_size=target_size)
+        else:
+            # Fallback to panning static image clip
+            motion_style = random.choice(motion_types)
+            img_clip = create_ken_burns_clip(img_path, duration, target_size=target_size, motion_type=motion_style)
         
         # Integrate customized auto-captions word overlay
         json_path = audio_path.replace(".mp3", ".json")
@@ -653,17 +747,9 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                     bg_clip_ducked = bg_clip_looped.transform_volume(volume_duck_filter)
                 except Exception as ve:
                     print(f"Warning: Ducking transform failed ({ve}), using fallback.")
-                    try:
-                        from moviepy.audio.fx.all import volumex
-                        bg_clip_ducked = bg_clip_looped.fx(volumex, 0.12)
-                    except Exception:
-                        bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
-            else:
-                try:
-                    from moviepy.audio.fx.all import volumex
-                    bg_clip_ducked = bg_clip_looped.fx(volumex, 0.12)
-                except Exception:
                     bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
+            else:
+                bg_clip_ducked = bg_clip_looped.with_volume_scaled(0.12)
                 
             # Mix music with narration audio
             mixed_audio = CompositeAudioClip([final_clip.audio, bg_clip_ducked])
@@ -671,6 +757,25 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             print(f"Successfully mixed background music: {bg_music_path}")
         except Exception as e:
             print(f"Warning: Failed to mix background music: {e}")
+            
+    # Transition Whoosh Sound Effects mixing
+    whoosh_sfx_path = "static/music/whoosh_transition.wav"
+    whoosh_audio_clips = []
+    if os.path.exists(whoosh_sfx_path) and len(clips) > 1:
+        try:
+            whoosh_sfx = AudioFileClip(whoosh_sfx_path)
+            half_dur = whoosh_sfx.duration / 2
+            # Add a transition whoosh centered around each transition point
+            for t_trans in clip_start_times[1:]:
+                whoosh_audio_clips.append(whoosh_sfx.with_start(max(0.0, t_trans - half_dur)))
+                
+            if whoosh_audio_clips:
+                from moviepy.audio.AudioClip import CompositeAudioClip
+                mixed_audio = CompositeAudioClip([final_clip.audio] + whoosh_audio_clips)
+                final_clip = final_clip.with_audio(mixed_audio)
+                print("Successfully mixed transition whoosh sound effects!")
+        except Exception as we:
+            print(f"Warning: Failed to mix transition whoosh sound effects: {we}")
             
     final_clip.write_videofile(
         output_path,
