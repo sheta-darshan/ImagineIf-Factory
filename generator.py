@@ -190,9 +190,9 @@ def generate_image_pollinations(prompt: str, output_path: str, aspect_ratio: str
         print(f"Warning converting fallback image: {e}")
         return output_path
 
-def generate_image_replicate(prompt: str, output_path: str, aspect_ratio: str = "16:9") -> str:
+def generate_image_replicate(prompt: str, output_path: str, aspect_ratio: str = "16:9", image_model: str = "schnell") -> str:
     """
-    Generates an image from a prompt using Replicate (black-forest-labs/flux-schnell).
+    Generates an image from a prompt using Replicate (black-forest-labs/flux-schnell or flux-dev).
     Falls back to Pollinations.ai if Replicate is not configured, has no credit, or fails.
     """
     token = os.getenv("REPLICATE_API_TOKEN")
@@ -200,13 +200,14 @@ def generate_image_replicate(prompt: str, output_path: str, aspect_ratio: str = 
         print("Replicate token not configured. Falling back to Pollinations.ai...")
         return generate_image_pollinations(prompt, output_path, aspect_ratio)
     
+    model_name = "black-forest-labs/flux-dev" if image_model == "dev" else "black-forest-labs/flux-schnell"
+    
     max_retries = 4
     output = None
     for attempt in range(max_retries):
         try:
-            # black-forest-labs/flux-schnell
             output = replicate.run(
-                "black-forest-labs/flux-schnell",
+                model_name,
                 input={
                     "prompt": prompt,
                     "aspect_ratio": aspect_ratio,
@@ -436,6 +437,18 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
                 scale = 1.35  # Excitement gets a massive pop
             elif "?" in w_text:
                 scale = 1.25  # Question gets a medium pop
+                
+            # Dynamic bounce/pop animation curve based on active timing
+            w_start = w.get('start', t)
+            w_end = w.get('end', t + 0.1)
+            w_dur = max(w_end - w_start, 0.05)
+            progress = (t - w_start) / w_dur
+            if progress < 0.25:
+                bounce_factor = 1.0 + (0.25 * (progress / 0.25))
+            else:
+                decay_progress = min((progress - 0.25) / 0.75, 1.0)
+                bounce_factor = 1.25 - (0.15 * decay_progress)
+            scale = scale * bounce_factor
         
         # Load scaled font for this word if necessary
         word_font = font
@@ -492,6 +505,18 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         if scale > 1.0:
             y_offset = -int((font_size * (scale - 1.0)) / 2)
             
+        # Draw 3D Drop Shadow first
+        shadow_offset = int(3 * scale)
+        draw.text(
+            (curr_x + shadow_offset, y_pos + y_offset + shadow_offset), 
+            text, 
+            fill=(0, 0, 0, 180),
+            font=word_font, 
+            stroke_width=int(4 * scale), 
+            stroke_fill=(0, 0, 0)
+        )
+            
+        # Draw Main Highlighted Text
         draw.text(
             (curr_x, y_pos + y_offset), 
             text, 

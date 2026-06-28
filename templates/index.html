@@ -527,7 +527,10 @@
         <!-- STEP 1: CONCEPT INPUT -->
         <div class="glass-panel step-content active" id="step-content-1">
             <div class="form-group">
-                <label for="thought-input">Enter your thought / story concept</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <label for="thought-input" style="margin-bottom:0;">Enter your thought / story concept</label>
+                    <button class="btn" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.25); box-shadow:none;" onclick="loadDailyTopic()" id="daily-topic-btn">📅 Surprise Me (365 Calendar)</button>
+                </div>
                 <textarea id="thought-input" placeholder="e.g. In the distant future, gravity is controlled by giant floating clockwork spheres. A lone engineer discovers one is ticking backwards, threatening to crush the city."></textarea>
             </div>
             
@@ -563,6 +566,13 @@
                     <select id="aspect-select">
                         <option value="16:9">Widescreen (16:9 - YouTube Widescreen)</option>
                         <option value="9:16">Shorts/Reels (9:16 - YouTube Vertical)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="model-select">Flux Quality Preset (Replicate)</label>
+                    <select id="model-select">
+                        <option value="schnell">Speed (Flux Schnell - Fast/Cheap)</option>
+                        <option value="dev">Quality (Flux Dev - Detailed/Realistic)</option>
                     </select>
                 </div>
             </div>
@@ -1004,6 +1014,8 @@
             const promptText = document.querySelector(`.seg-prompt[data-index="${index}"]`).value.trim();
             const aspectRatio = document.getElementById("aspect-select").value;
             
+            const imageModel = document.getElementById("model-select").value;
+            
             const btnAudio = document.getElementById(`regen-audio-btn-${index}`);
             const btnImage = document.getElementById(`regen-image-btn-${index}`);
             const btnAll = document.getElementById(`regen-all-btn-${index}`);
@@ -1032,7 +1044,8 @@
                         visualPrompt: promptText,
                         aspectRatio: aspectRatio,
                         regenerateAudio: regenAudio,
-                        regenerateImage: regenImage
+                        regenerateImage: regenImage,
+                        imageModel: imageModel
                     })
                 });
                 
@@ -1091,6 +1104,8 @@
                 currentSegments[idx].visual_prompt = textarea.value.trim();
             });
 
+            const imageModel = document.getElementById("model-select").value;
+
             const btn = document.getElementById("generate-assets-btn");
             const spinner = document.getElementById("assets-btn-spinner");
             const status = document.getElementById("assets-status");
@@ -1107,7 +1122,8 @@
                     body: JSON.stringify({
                         projectId: currentProjectId,
                         segments: currentSegments,
-                        aspectRatio: aspectRatio
+                        aspectRatio: aspectRatio,
+                        imageModel: imageModel
                     })
                 });
 
@@ -1238,6 +1254,28 @@
             } finally {
                 document.getElementById("generate-assets-btn").disabled = false;
                 document.getElementById("assets-btn-spinner").style.display = "none";
+            }
+        async function loadDailyTopic() {
+            const btn = document.getElementById("daily-topic-btn");
+            const input = document.getElementById("thought-input");
+            
+            btn.disabled = true;
+            const originalText = btn.innerText;
+            btn.innerText = "Loading Topic...";
+            
+            try {
+                const response = await fetch("/api/daily-topic");
+                if (response.ok) {
+                    const data = await response.json();
+                    input.value = data.topic;
+                } else {
+                    alert("Failed to load daily topic.");
+                }
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
             }
         }
     </script>

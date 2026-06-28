@@ -45,6 +45,7 @@ class AssetRequest(BaseModel):
     projectId: str
     segments: List[Segment]
     aspectRatio: str = "16:9"
+    imageModel: str = "schnell"
 
 class RenderRequest(BaseModel):
     projectId: str
@@ -64,6 +65,7 @@ class RegenerateSegmentRequest(BaseModel):
     aspectRatio: str = "16:9"
     regenerateAudio: bool = True
     regenerateImage: bool = True
+    imageModel: str = "schnell"
 
 @app.get("/", response_class=HTMLResponse)
 async def read_item(request: Request):
@@ -100,9 +102,40 @@ async def api_list_projects():
                 except Exception as e:
                     print(f"Error reading metadata for {item}: {e}")
                     
-    # Sort projects by timestamp descending (newest first)
     projects.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
     return projects
+
+@app.get("/api/daily-topic")
+async def api_daily_topic():
+    """
+    Scans content_calendar_365.md and pulls a random speculative topic not marked as Done.
+    """
+    calendar_path = "content_calendar_365.md"
+    if not os.path.exists(calendar_path):
+        return {"topic": "Imagine if human cities were built inside giant trees."}
+        
+    try:
+        import re
+        import random
+        unused_topics = []
+        with open(calendar_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # Matches Day headings: **Day X:** Imagine if...
+                match = re.search(r"\*\*Day \d+:\*\*\s*(.*)", line)
+                if match:
+                    topic_text = match.group(1).strip()
+                    if not topic_text.endswith("-Done"):
+                        unused_topics.append(topic_text)
+                        
+        if unused_topics:
+            selected = random.choice(unused_topics)
+            return {"topic": selected}
+        else:
+            return {"topic": "Imagine if gravity on Earth randomly turned off for five seconds every day."}
+    except Exception as e:
+        print(f"Error parsing calendar: {e}")
+        return {"topic": "Imagine if space travel was as cheap as buying a bus ticket."}
 
 @app.delete("/api/delete-project/{projectId}")
 async def api_delete_project(projectId: str):
@@ -203,7 +236,8 @@ async def api_generate_assets(req: AssetRequest):
                     generator.generate_image_replicate, 
                     seg.visual_prompt, 
                     image_path_raw,
-                    req.aspectRatio
+                    req.aspectRatio,
+                    req.imageModel
                 )
         
         # Run concurrently
@@ -266,7 +300,8 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
                     generator.generate_image_replicate,
                     req.visualPrompt,
                     image_path_raw,
-                    req.aspectRatio
+                    req.aspectRatio,
+                    req.imageModel
                 )
             tasks.append(run_image())
         else:
