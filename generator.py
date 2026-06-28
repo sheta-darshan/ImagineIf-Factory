@@ -271,9 +271,10 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
     output = None
     for attempt in range(max_retries):
         try:
-            # Create prediction asynchronously using fast Lightricks LTX-Video model
+            # Fetch latest version of Lightricks LTX-Video model dynamically
+            model = replicate.models.get("lightricks/ltx-video")
             prediction = replicate.predictions.create(
-                model="lightricks/ltx-video",
+                version=model.latest_version,
                 input={
                     "prompt": prompt,
                     "aspect_ratio": aspect_ratio,
