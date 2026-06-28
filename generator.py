@@ -271,14 +271,13 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
     output = None
     for attempt in range(max_retries):
         try:
-            # Create prediction asynchronously to avoid read timeouts on long cold-starts
+            # Create prediction asynchronously using fast Lightricks LTX-Video model
             prediction = replicate.predictions.create(
-                version="e047b1d734c550671fb4de7f7df7f9341ed498b4aa7cd88b82533b60dfec33e3",
+                model="lightricks/ltx-video",
                 input={
                     "prompt": prompt,
-                    "num_frames": 49,
-                    "guidance_scale": 6.0,
-                    "num_inference_steps": 50
+                    "aspect_ratio": aspect_ratio,
+                    "negative_prompt": "low quality, blurry, watermark"
                 }
             )
             
