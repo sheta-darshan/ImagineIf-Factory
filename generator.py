@@ -63,7 +63,7 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
       "segments": [
          {{
            "text_to_speak": "spoken narration text for this segment, written in simple and clear English",
-           "visual_prompt": "highly detailed visual prompt describing the scene, style, lighting, composition, and dynamic motion (e.g. slow-motion camera sweep, steam rising, wind blowing, debris drifting, subtle character gestures). Explicitly describe the motion or camera movement to enable high-quality AI video generation."
+           "visual_prompt": "An expanded, highly detailed cinematic visual prompt. Describe the specific scene composition, professional camera angles, detailed lighting parameters (e.g. volumetric rays, rim lighting, soft dramatic shadows), lens settings (e.g. shallow depth of field, macro details), color grading, and dynamic motion descriptors (e.g. slow-motion camera sweep, steam rising, wind blowing, dust particles drifting). Do not just state a style; paint it with rich descriptive modifiers for maximum visual generation fidelity."
          }}
       ]
 
@@ -120,12 +120,12 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
         print(f"Error parsing JSON from Gemini: {e}. Raw response: {response.text}")
         raise e
 
-async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-GuyNeural"):
+async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-GuyNeural", rate: str = "+0%", pitch: str = "+0Hz"):
     """
     Generates a voiceover .mp3 file for the given text using edge-tts.
     Also captures word timings and saves them as a JSON file.
     """
-    communicate = edge_tts.Communicate(text, voice, boundary="WordBoundary")
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
     words = []
     
     with open(output_path, "wb") as f:
@@ -840,23 +840,33 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             except Exception:
                 bg_clip_looped = bg_clip.loop(duration=final_duration)
                 
-            # Duck music volume to 8% during speech, boost to 22% during silence/breaks
+            # Duck music volume to 8% during speech, boost to 22% during silence/breaks with a smooth 0.4s fade
             if speaking_intervals:
                 def volume_duck_filter(t):
                     import numpy as np
-                    if isinstance(t, np.ndarray):
-                        res = np.ones(t.shape) * 0.22
-                        for idx_t, time_val in enumerate(t):
-                            for start, end in speaking_intervals:
-                                if start <= time_val <= end:
-                                    res[idx_t] = 0.08
-                                    break
-                        return res
-                    else:
+                    fade_duration = 0.4
+                    low_vol = 0.08
+                    high_vol = 0.22
+                    
+                    def get_vol_for_t(time_val):
+                        # Check if inside any speaking interval
                         for start, end in speaking_intervals:
-                            if start <= t <= end:
-                                return 0.08
-                        return 0.22
+                            if start <= time_val <= end:
+                                return low_vol
+                        
+                        # Find closest distance to any boundary
+                        min_dist = float('inf')
+                        for start, end in speaking_intervals:
+                            min_dist = min(min_dist, abs(time_val - start), abs(time_val - end))
+                        
+                        # Smooth transition multiplier
+                        factor = min(min_dist / fade_duration, 1.0)
+                        return low_vol + (high_vol - low_vol) * factor
+
+                    if isinstance(t, np.ndarray):
+                        return np.array([get_vol_for_t(time_val) for time_val in t])
+                    else:
+                        return get_vol_for_t(t)
                 
                 try:
                     bg_clip_ducked = bg_clip_looped.transform_volume(volume_duck_filter)

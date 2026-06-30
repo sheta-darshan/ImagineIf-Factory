@@ -193,6 +193,17 @@ async def api_generate_script(req: ScriptRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def get_voice_settings_for_style(visual_style: str):
+    """
+    Returns optimal edge-tts rate and pitch adjustments based on the chosen visual style.
+    """
+    settings = {
+        "Cyberpunk": ("+6%", "+2Hz"),
+        "Dark Sci-Fi / Fantasy": ("-8%", "-5Hz"),
+        "Steampunk Oil Painting": ("-4%", "-2Hz"),
+    }
+    return settings.get(visual_style, ("+0%", "+0Hz"))
+
 @app.post("/api/generate-assets")
 async def api_generate_assets(req: AssetRequest):
     """
@@ -215,6 +226,18 @@ async def api_generate_assets(req: AssetRequest):
         except Exception as e:
             print(f"Error updating metadata during assets gen: {e}")
             
+    # Load visual style from metadata
+    visual_style = "Cinematic Photo"
+    meta_path = f"{project_dir}/metadata.json"
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            visual_style = meta.get("visualStyle", "Cinematic Photo")
+        except Exception:
+            pass
+    rate_str, pitch_str = get_voice_settings_for_style(visual_style)
+    
     # Use a Semaphore of 1 to ensure images are generated sequentially
     image_semaphore = asyncio.Semaphore(1)
     
@@ -225,8 +248,8 @@ async def api_generate_assets(req: AssetRequest):
         image_filename = f"image_{index}" # extension added later
         image_path_raw = f"{project_dir}/{image_filename}.webp"
         
-        # 1. Generate Voiceover (async, completely parallel)
-        voiceover_task = generator.generate_voiceover(seg.text_to_speak, audio_path)
+        # 1. Generate Voiceover (async, completely parallel with style settings)
+        voiceover_task = generator.generate_voiceover(seg.text_to_speak, audio_path, rate=rate_str, pitch=pitch_str)
         
         # 2. Generate Visual Asset (queued sequentially using Semaphore)
         async def run_image_task():
@@ -287,15 +310,24 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
     image_filename = f"image_{req.segmentIndex}" # extension added later
     image_path_raw = f"{project_dir}/{image_filename}.webp"
     
-    actual_audio_path = f"outputs/{project_id}/{audio_filename}"
-    actual_image_path = ""
+    # Load visual style from metadata for pitch/rate adjustments
+    visual_style = "Cinematic Photo"
+    meta_path = f"{project_dir}/metadata.json"
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            visual_style = meta.get("visualStyle", "Cinematic Photo")
+        except Exception:
+            pass
+    rate_str, pitch_str = get_voice_settings_for_style(visual_style)
     
     try:
         tasks = []
         
         # 1. Regenerate voiceover if requested
         if req.regenerateAudio:
-            tasks.append(generator.generate_voiceover(req.textToSpeak, audio_path))
+            tasks.append(generator.generate_voiceover(req.textToSpeak, audio_path, rate=rate_str, pitch=pitch_str))
         else:
             # Dummy awaitable to match unpack count
             async def dummy_voice():
