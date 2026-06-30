@@ -629,7 +629,9 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
             "width": w_width,
             "font": word_font,
             "color": word_color,
-            "scale": scale
+            "scale": scale,
+            "is_active": is_active,
+            "raw_word": w_text
         })
         total_w += w_width + space_w
         
@@ -644,6 +646,8 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         word_font = w_meta["font"]
         word_color = w_meta["color"]
         scale = w_meta["scale"]
+        is_active = w_meta.get("is_active", False)
+        raw_word = w_meta.get("raw_word", "")
         
         # Center vertically around standard baseline
         y_offset = 0
@@ -672,6 +676,36 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
             stroke_width=outline_w, 
             stroke_fill=(0, 0, 0)
         )
+        
+        # Draw Keyword-Driven Emoji Pop-In above active word
+        if is_active and raw_word:
+            # Emoji Pop-In Mapping
+            emoji_map = {
+                "money": "💰", "cash": "💰", "gold": "💰", "rich": "💰", "wealth": "💰", "dollar": "💵",
+                "space": "🚀", "star": "⭐", "rocket": "🚀", "universe": "🌌", "galaxy": "🌌", "cosmos": "🌌",
+                "storm": "⚡", "lightning": "⚡", "thunder": "⛈️", "rain": "🌧️",
+                "time": "⏰", "clock": "⏰", "tick": "⏱️", "watch": "⌚",
+                "heart": "❤️", "love": "❤️", "mind-blowing": "🤯", "brain": "🧠", "smart": "🧠",
+                "alien": "👽", "ufo": "🛸", "future": "🤖", "robot": "🤖",
+                "ocean": "🌊", "sea": "🌊", "water": "💧", "fire": "🔥", "hot": "🔥",
+                "planet": "🪐", "moon": "🌙", "sun": "☀️", "earth": "🌍",
+                "death": "💀", "dead": "💀", "survive": "🛡️", "danger": "⚠️"
+            }
+            cleaned_word = raw_word.lower().strip(".,?!:;()\"'-")
+            if cleaned_word in emoji_map:
+                emoji_char = emoji_map[cleaned_word]
+                try:
+                    emoji_font = ImageFont.truetype("C:\\Windows\\Fonts\\seguiemj.ttf", int(56 * scale))
+                except Exception:
+                    emoji_font = word_font
+                
+                emoji_w = draw.textlength(emoji_char, font=emoji_font)
+                emoji_x = curr_x + (w_w - emoji_w) / 2
+                emoji_y = y_pos + y_offset - int(72 * scale)
+                
+                # Draw emoji (using seguiemj supports color emojis)
+                draw.text((emoji_x, emoji_y), emoji_char, fill=(255, 255, 255), font=emoji_font)
+                
         curr_x += w_w + space_w
         
     return np.array(pil_img)

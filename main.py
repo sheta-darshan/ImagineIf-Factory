@@ -46,6 +46,7 @@ class AssetRequest(BaseModel):
     segments: List[Segment]
     aspectRatio: str = "16:9"
     imageModel: str = "schnell"
+    voice: str = "en-US-GuyNeural"
 
 class RenderRequest(BaseModel):
     projectId: str
@@ -67,6 +68,7 @@ class RegenerateSegmentRequest(BaseModel):
     regenerateAudio: bool = True
     regenerateImage: bool = True
     imageModel: str = "schnell"
+    voice: str = "en-US-GuyNeural"
 
 @app.get("/", response_class=HTMLResponse)
 async def read_item(request: Request):
@@ -249,7 +251,7 @@ async def api_generate_assets(req: AssetRequest):
         image_path_raw = f"{project_dir}/{image_filename}.webp"
         
         # 1. Generate Voiceover (async, completely parallel with style settings)
-        voiceover_task = generator.generate_voiceover(seg.text_to_speak, audio_path, rate=rate_str, pitch=pitch_str)
+        voiceover_task = generator.generate_voiceover(seg.text_to_speak, audio_path, voice=req.voice, rate=rate_str, pitch=pitch_str)
         
         # 2. Generate Visual Asset (queued sequentially using Semaphore)
         async def run_image_task():
@@ -327,7 +329,7 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
         
         # 1. Regenerate voiceover if requested
         if req.regenerateAudio:
-            tasks.append(generator.generate_voiceover(req.textToSpeak, audio_path, rate=rate_str, pitch=pitch_str))
+            tasks.append(generator.generate_voiceover(req.textToSpeak, audio_path, voice=req.voice, rate=rate_str, pitch=pitch_str))
         else:
             # Dummy awaitable to match unpack count
             async def dummy_voice():
@@ -463,6 +465,51 @@ async def api_render_video(req: RenderRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to render video: {str(e)}")
+
+class YouTubeUploadRequest(BaseModel):
+    projectId: str
+    title: str
+    description: str
+    tags: str = ""
+
+@app.post("/api/youtube-upload")
+async def api_youtube_upload(req: YouTubeUploadRequest):
+    """
+    Endpoint to publish the rendered video to YouTube.
+    """
+    project_id = req.projectId
+    video_path = f"outputs/{project_id}/final_video.mp4"
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=400, detail="Rendered video not found. Please render the video first.")
+        
+    try:
+        import youtube_uploader
+        # Run upload in background thread to avoid blocking FastAPI event loop
+        video_id = await asyncio.to_thread(
+            youtube_uploader.upload_video_to_youtube,
+            video_path,
+            req.title,
+            req.description,
+            req.tags
+        )
+        return {"status": "success", "videoId": video_id}
+    except FileNotFoundError as fnf:
+        # Precondition failed (no client_secrets.json)
+        raise HTTPException(status_code=412, detail=str(fnf))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"YouTube Upload Failed: {str(e)}")
+
+@app.get("/api/youtube-check-auth")
+async def api_youtube_check_auth():
+    """
+    Helper to check if YouTube API client secrets and cached tokens exist.
+    """
+    secrets_exists = os.path.exists("client_secrets.json")
+    token_exists = os.path.exists("client_token.json")
+    return {
+        "secretsConfigured": secrets_exists,
+        "authenticated": token_exists
+    }
 
 if __name__ == "__main__":
     import uvicorn
