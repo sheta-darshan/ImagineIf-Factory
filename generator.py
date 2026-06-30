@@ -60,11 +60,11 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
       "segments": [
          {{
            "text_to_speak": "spoken narration text for this segment, written in simple and clear English",
-           "visual_prompt": "highly detailed visual prompt describing the scene, style, lighting, and composition"
+           "visual_prompt": "highly detailed visual prompt describing the scene, style, lighting, composition, and dynamic motion (e.g. slow-motion camera sweep, steam rising, wind blowing, debris drifting, subtle character gestures). Explicitly describe the motion or camera movement to enable high-quality AI video generation."
          }}
       ]
 
-    Ensure the visuals strictly adhere to the following style: {chosen_style}. Make sure the prompt itself is descriptive rather than just stating the style name.
+    Ensure the visuals strictly adhere to the following style: {chosen_style}. Make sure the prompt itself is descriptive rather than just stating the style name and always include active, cinematic camera movements or environmental motion instructions.
     """
 
     global client
