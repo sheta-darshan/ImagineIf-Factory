@@ -602,6 +602,15 @@
 
             <div class="row">
                 <div class="form-group">
+                    <label for="preset-select">Caption Style Preset</label>
+                    <select id="preset-select">
+                        <option value="default">Default Custom Styling</option>
+                        <option value="mrbeast">🔥 MrBeast Pop (Bold Uppercase Alternating)</option>
+                        <option value="minimalist">▫️ Minimalist (Clean White Sans-Serif)</option>
+                        <option value="cyberpunk">⚡ Cyberpunk Neon (Cyan/Magenta Typewriter)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="pos-select">Subtitle Screen Position</label>
                     <select id="pos-select">
                         <option value="Bottom">Bottom (70%)</option>
@@ -609,7 +618,10 @@
                         <option value="Top">Top (18%)</option>
                     </select>
                 </div>
-                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1.8rem;">
+            </div>
+
+            <div class="row">
+                <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem;">
                     <input type="checkbox" id="watermark-check" checked style="width:20px; height:20px; accent-color: var(--primary); margin-left: 0.5rem;">
                     <label for="watermark-check" style="margin-bottom: 0; cursor: pointer; text-transform: none; letter-spacing: 0;">Add Watermark (@ImagineIfOfficial)</label>
                 </div>
@@ -905,6 +917,14 @@
                 if (response.ok) {
                     const tracks = await response.json();
                     const select = document.getElementById("music-select");
+                    
+                    // Add Auto-Select BGM option first
+                    const autoOpt = document.createElement("option");
+                    autoOpt.value = "Auto-Select";
+                    autoOpt.textContent = "🎵 Auto-Select (Recommended)";
+                    autoOpt.selected = true;
+                    select.appendChild(autoOpt);
+                    
                     tracks.forEach(track => {
                         const opt = document.createElement("option");
                         opt.value = track;
@@ -1199,6 +1219,7 @@
             const highlightColor = document.getElementById("color-select").value;
             const captionPosition = document.getElementById("pos-select").value;
             const addWatermark = document.getElementById("watermark-check").checked;
+            const captionPreset = document.getElementById("preset-select").value;
 
             // Dynamically style the video player size based on aspect ratio
             if (aspectRatio === "9:16") {
@@ -1232,7 +1253,8 @@
                         fontName: fontName,
                         highlightColor: highlightColor,
                         captionPosition: captionPosition,
-                        addWatermark: addWatermark
+                        addWatermark: addWatermark,
+                        captionPreset: captionPreset
                     })
                 });
 

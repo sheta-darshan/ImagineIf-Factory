@@ -397,9 +397,9 @@ def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1
     return canvas
 
 
-def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", highlight_color_name="Yellow", position_name="Bottom", add_watermark=False, is_last_segment=False):
+def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", highlight_color_name="Yellow", position_name="Bottom", add_watermark=False, is_last_segment=False, caption_preset="default"):
     """
-    Draws custom styled highlighted subtitles, an optional brand watermark, and engagement overlays on a numpy video frame using PIL.
+    Draws custom styled highlighted subtitles, watermark, and dynamic overlays based on a style preset.
     """
     # Convert numpy frame (RGB) to Pillow Image
     pil_img = Image.fromarray(frame)
@@ -492,6 +492,13 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         "Courier Bold": "C:\\Windows\\Fonts\\courbd.ttf",
         "Times Bold": "C:\\Windows\\Fonts\\timesbd.ttf"
     }
+    
+    # Preset Overrides
+    if caption_preset == "mrbeast":
+        font_name = "Impact"
+    elif caption_preset == "cyberpunk":
+        font_name = "Courier Bold"
+        
     font_file = font_paths.get(font_name, font_paths["Arial Bold"])
     
     # Scale font size slightly larger for Shorts (9:16)
@@ -544,10 +551,15 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         scale = 1.0
         if is_active:
             scale = 1.18  # Pop active word slightly
+            if caption_preset == "mrbeast":
+                scale = 1.30
+            elif caption_preset == "minimalist":
+                scale = 1.05
+                
             if "!" in w_text:
-                scale = 1.35  # Excitement gets a massive pop
+                scale *= 1.15
             elif "?" in w_text:
-                scale = 1.25  # Question gets a medium pop
+                scale *= 1.08
                 
             # Dynamic bounce/pop animation curve based on active timing
             w_start = w.get('start', t)
@@ -571,8 +583,11 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
                 
         # Transform text based on context
         display_text = w_text
-        if is_active and "!" in w_text:
+        if caption_preset == "mrbeast":
             display_text = w_text.upper()
+        else:
+            if is_active and "!" in w_text:
+                display_text = w_text.upper()
         if has_pause and is_active:
             display_text = w_text + "..."
             
@@ -581,14 +596,23 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         # Determine Color based on spoken expression
         word_color = (255, 255, 255)
         if is_active:
-            if "!" in w_text:
-                word_color = (255, 69, 0)  # Red-Orange for high excitement!
-            elif "?" in w_text:
-                word_color = (0, 255, 255)  # Cyan for questions?
-            elif has_pause:
-                word_color = (219, 112, 147)  # Pink-Violet for pauses...
+            if caption_preset == "mrbeast":
+                # Alternate Yellow and Neon Green for active words
+                word_color = (255, 255, 0) if (active_word_idx % 2 == 0) else (57, 255, 20)
+            elif caption_preset == "minimalist":
+                word_color = (255, 255, 255)
+            elif caption_preset == "cyberpunk":
+                # Alternate Neon Cyan and Neon Magenta for active words
+                word_color = (0, 255, 255) if (active_word_idx % 2 == 0) else (255, 0, 255)
             else:
-                word_color = highlight_rgb
+                if "!" in w_text:
+                    word_color = (255, 69, 0)  # Red-Orange for high excitement!
+                elif "?" in w_text:
+                    word_color = (0, 255, 255)  # Cyan for questions?
+                elif has_pause:
+                    word_color = (219, 112, 147)  # Pink-Violet for pauses...
+                else:
+                    word_color = highlight_rgb
                 
         words_metadata.append({
             "text": display_text,
@@ -616,31 +640,33 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         if scale > 1.0:
             y_offset = -int((font_size * (scale - 1.0)) / 2)
             
-        # Draw 3D Drop Shadow first
-        shadow_offset = int(3 * scale)
-        draw.text(
-            (curr_x + shadow_offset, y_pos + y_offset + shadow_offset), 
-            text, 
-            fill=(0, 0, 0, 180),
-            font=word_font, 
-            stroke_width=int(4 * scale), 
-            stroke_fill=(0, 0, 0)
-        )
+        # Draw 3D Drop Shadow first (except for minimalist)
+        if caption_preset != "minimalist":
+            shadow_offset = int(3 * scale)
+            draw.text(
+                (curr_x + shadow_offset, y_pos + y_offset + shadow_offset), 
+                text, 
+                fill=(0, 0, 0, 180),
+                font=word_font, 
+                stroke_width=int(4 * scale), 
+                stroke_fill=(0, 0, 0)
+            )
             
         # Draw Main Highlighted Text
+        outline_w = int(1.5 * scale) if caption_preset == "minimalist" else int(4 * scale)
         draw.text(
             (curr_x, y_pos + y_offset), 
             text, 
             fill=word_color, 
             font=word_font, 
-            stroke_width=int(4 * scale), 
+            stroke_width=outline_w, 
             stroke_fill=(0, 0, 0)
         )
         curr_x += w_w + space_w
         
     return np.array(pil_img)
 
-def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9", bg_music_path: str = None, font_name: str = "Arial Bold", highlight_color: str = "Yellow", caption_position: str = "Bottom", add_watermark: bool = False) -> str:
+def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9", bg_music_path: str = None, font_name: str = "Arial Bold", highlight_color: str = "Yellow", caption_position: str = "Bottom", add_watermark: bool = False, caption_preset: str = "default") -> str:
     """
     Stitches generated audio and visual assets (images or CogVideoX videos) together into a final MP4 video.
     """
@@ -651,6 +677,7 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
     # Track speaking intervals for dynamic audio ducking
     speaking_intervals = []
     clip_start_times = []
+    environmental_sfx_clips = []
     curr_start = 0.0
     
     motion_types = ["zoom_in", "zoom_out", "pan_left", "pan_right"]
@@ -714,10 +741,10 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             
             # Dynamic subtitle & watermark frame processor function
             is_last = (i == len(segments) - 1)
-            def make_subtitle_filter(timings, size, font, color, pos, watermark, is_last_seg):
+            def make_subtitle_filter(timings, size, font, color, pos, watermark, is_last_seg, preset):
                 def filter_func(get_frame, t):
                     frame = get_frame(t)
-                    return draw_text_on_frame(frame, t, timings, size, font, color, pos, watermark, is_last_seg)
+                    return draw_text_on_frame(frame, t, timings, size, font, color, pos, watermark, is_last_seg, preset)
                 return filter_func
             
             filter_to_apply = make_subtitle_filter(
@@ -727,7 +754,8 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                 highlight_color, 
                 caption_position, 
                 add_watermark,
-                is_last
+                is_last,
+                caption_preset
             )
             
             if hasattr(img_clip, "transform"):
@@ -738,12 +766,49 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             print(f"Warning: Failed to apply subtitle/watermark overlay: {se}")
             
         # Collect word timestamps relative to the final merged timeline
+        # Define keyword-to-SFX mapping
+        sfx_keywords = {
+            "money": "static/sfx/coin_clink.wav",
+            "gold": "static/sfx/coin_clink.wav",
+            "cash": "static/sfx/coin_clink.wav",
+            "wealth": "static/sfx/coin_clink.wav",
+            "rich": "static/sfx/coin_clink.wav",
+            
+            "storm": "static/sfx/thunder_rumble.wav",
+            "rain": "static/sfx/thunder_rumble.wav",
+            "thunder": "static/sfx/thunder_rumble.wav",
+            "lightning": "static/sfx/thunder_rumble.wav",
+            
+            "time": "static/sfx/clock_tick.wav",
+            "clock": "static/sfx/clock_tick.wav",
+            "tick": "static/sfx/clock_tick.wav",
+            "watch": "static/sfx/clock_tick.wav",
+            
+            "space": "static/sfx/space_hum.wav",
+            "star": "static/sfx/space_hum.wav",
+            "universe": "static/sfx/space_hum.wav",
+            "galaxy": "static/sfx/space_hum.wav",
+            "cosmos": "static/sfx/space_hum.wav"
+        }
+        
         if word_timings:
             for w in word_timings:
                 word_start = curr_start + w.get("start", 0)
                 word_end = curr_start + w.get("end", 0)
                 # Pad slightly for natural decay
                 speaking_intervals.append((word_start - 0.15, word_end + 0.15))
+                
+                # Check for environmental SFX triggers
+                cleaned_word = w.get("word", "").lower().strip(".,?!:;()\"'-")
+                if cleaned_word in sfx_keywords:
+                    sfx_file = sfx_keywords[cleaned_word]
+                    if os.path.exists(sfx_file):
+                        try:
+                            sfx_clip = AudioFileClip(sfx_file).with_start(word_start)
+                            environmental_sfx_clips.append(sfx_clip)
+                            print(f"Triggered SFX '{cleaned_word}' -> {sfx_file} at {word_start}s")
+                        except Exception as se_err:
+                            print(f"Failed to load keyword SFX: {se_err}")
                 
         img_clip = img_clip.with_audio(audio_clip)
         clips.append(img_clip)
@@ -824,6 +889,16 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             print("Successfully mixed final segment chime notification sound effect!")
         except Exception as ce:
             print(f"Warning: Failed to mix chime sound effect: {ce}")
+            
+    # Mix environmental SFX if available
+    if environmental_sfx_clips:
+        try:
+            from moviepy.audio.AudioClip import CompositeAudioClip
+            mixed_audio = CompositeAudioClip([final_clip.audio] + environmental_sfx_clips)
+            final_clip = final_clip.with_audio(mixed_audio)
+            print(f"Successfully mixed {len(environmental_sfx_clips)} environmental sound effects!")
+        except Exception as ese:
+            print(f"Warning: Failed to mix environmental sound effects: {ese}")
             
     final_clip.write_videofile(
         output_path,

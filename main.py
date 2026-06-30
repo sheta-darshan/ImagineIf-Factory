@@ -56,6 +56,7 @@ class RenderRequest(BaseModel):
     highlightColor: str = "Yellow"
     captionPosition: str = "Bottom"
     addWatermark: bool = False
+    captionPreset: str = "default"
 
 class RegenerateSegmentRequest(BaseModel):
     projectId: str
@@ -371,7 +372,30 @@ async def api_render_video(req: RenderRequest):
         
     bg_music_path = None
     if req.musicTrack:
-        bg_music_path = f"static/music/{req.musicTrack}"
+        if req.musicTrack in ["Auto-Select", "auto", "Auto"]:
+            # Auto-detect visual style from metadata
+            visual_style = "Cinematic Photo"
+            meta_path = f"{project_dir}/metadata.json"
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    visual_style = meta.get("visualStyle", "Cinematic Photo")
+                except Exception:
+                    pass
+            # Map visual style to corresponding BGM
+            style_music_mapping = {
+                "Cyberpunk": "synthwave_beat.mp3",
+                "Retro Anime": "ambient_dream.mp3",
+                "Dark Sci-Fi / Fantasy": "ambient_space.mp3",
+                "Steampunk Oil Painting": "ambient_dream.mp3",
+                "Cinematic Photo": "ambient_dream.mp3"
+            }
+            mapped_track = style_music_mapping.get(visual_style, "ambient_dream.mp3")
+            bg_music_path = f"static/music/{mapped_track}"
+            print(f"Auto-selected BGM '{mapped_track}' for style '{visual_style}'")
+        else:
+            bg_music_path = f"static/music/{req.musicTrack}"
         
     try:
         # Assemble using moviepy
@@ -384,7 +408,8 @@ async def api_render_video(req: RenderRequest):
             req.fontName,
             req.highlightColor,
             req.captionPosition,
-            req.addWatermark
+            req.addWatermark,
+            req.captionPreset
         )
         
         # Update project metadata
