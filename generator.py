@@ -808,25 +808,7 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
         except Exception as e:
             print(f"Warning: Failed to mix background music: {e}")
             
-    # Transition Whoosh Sound Effects mixing
-    whoosh_sfx_path = "static/music/whoosh_transition.wav"
-    whoosh_audio_clips = []
-    if os.path.exists(whoosh_sfx_path) and len(clips) > 1:
-        try:
-            whoosh_sfx = AudioFileClip(whoosh_sfx_path)
-            half_dur = whoosh_sfx.duration / 2
-            # Add a transition whoosh centered around each transition point
-            for t_trans in clip_start_times[1:]:
-                whoosh_audio_clips.append(whoosh_sfx.with_start(max(0.0, t_trans - half_dur)))
-                
-            if whoosh_audio_clips:
-                from moviepy.audio.AudioClip import CompositeAudioClip
-                mixed_audio = CompositeAudioClip([final_clip.audio] + whoosh_audio_clips)
-                final_clip = final_clip.with_audio(mixed_audio)
-                print("Successfully mixed transition whoosh sound effects!")
-        except Exception as we:
-            print(f"Warning: Failed to mix transition whoosh sound effects: {we}")
-            
+    
     # Engagement Chime Notification SFX mixing for the final segment CTA
     chime_sfx_path = "static/music/chime_notification.wav"
     if os.path.exists(chime_sfx_path) and len(clip_start_times) > 0:
