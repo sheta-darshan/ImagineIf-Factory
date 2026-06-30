@@ -341,7 +341,17 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
 def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> ImageClip:
     """
     Creates an ImageClip with varied Ken Burns animations: zoom_in, zoom_out, pan_left, pan_right.
+    Falls back to a solid slate background canvas if the image file is missing or invalid.
     """
+    if not image_path or not os.path.exists(image_path):
+        print(f"Warning: Image asset '{image_path}' not found. Generating solid slate canvas fallback.")
+        fallback_img = Image.new("RGB", target_size, color=(15, 23, 42))  # Slate dark background
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        temp_file.close()
+        fallback_img.save(temp_file.name, "JPEG")
+        image_path = temp_file.name
+        
     with Image.open(image_path) as img:
         img_w, img_h = img.size
     
@@ -686,9 +696,10 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
         img_path = seg.get("image_path")
         audio_path = seg.get("audio_path")
         
+        # If visual asset is missing, fall back to creating a slate canvas instead of skipping the segment
         if not img_path or not os.path.exists(img_path):
-            print(f"Skipping segment {i} due to missing visual asset: {img_path}")
-            continue
+            print(f"Warning: Visual asset missing for segment {i} ({img_path}). Using fallback slate canvas.")
+            img_path = None
             
         if not audio_path or not os.path.exists(audio_path):
             print(f"Skipping segment {i} due to missing audio: {audio_path}")
@@ -698,7 +709,7 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
         duration = audio_clip.duration
         clip_start_times.append(curr_start)
         
-        is_video_asset = img_path.lower().endswith(".mp4")
+        is_video_asset = img_path.lower().endswith(".mp4") if img_path else False
         if is_video_asset:
             try:
                 # Load, scale, and center-crop video clip to target size
@@ -732,7 +743,8 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             img_clip = create_ken_burns_clip(img_path, duration, target_size=target_size, motion_type=motion_style)
         
         # Integrate customized auto-captions word overlay
-        json_path = audio_path.replace(".mp3", ".json")
+        base_audio_path, _ = os.path.splitext(audio_path)
+        json_path = base_audio_path + ".json"
         word_timings = None
         try:
             if os.path.exists(json_path):
