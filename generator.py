@@ -879,12 +879,15 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
             from moviepy.audio.AudioClip import CompositeAudioClip
             bg_clip = AudioFileClip(bg_music_path)
             
-            # Loop audio using helper fallbacks
+            # Loop audio using robust manual concatenation (compatible with all MoviePy versions)
             try:
-                from moviepy.audio.fx.all import audio_loop
-                bg_clip_looped = bg_clip.fx(audio_loop, duration=final_duration)
-            except Exception:
-                bg_clip_looped = bg_clip.loop(duration=final_duration)
+                import math
+                from moviepy.audio.AudioClip import concatenate_audioclips
+                n_loops = int(math.ceil(final_duration / bg_clip.duration))
+                bg_clip_looped = concatenate_audioclips([bg_clip] * n_loops).subclipped(0, final_duration)
+            except Exception as le:
+                print(f"Warning: Manual audio loop failed ({le}). Falling back to raw clip.")
+                bg_clip_looped = bg_clip.with_duration(final_duration)
                 
             # Duck music volume to 8% during speech, boost to 22% during silence/breaks with a smooth 0.4s fade
             if speaking_intervals:
