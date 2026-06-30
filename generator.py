@@ -47,9 +47,12 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
     Each segment must last approximately 5 to 10 seconds (roughly 15 to 25 words of spoken narration per segment).
     The narration should flow naturally as a single continuous script.
     
-    CRITICAL LANGUAGE REQUIREMENT: Write the spoken narration (`text_to_speak`) in very simple, clear, and easy-to-understand English. It should be understandable by anyone with basic English skills (around a 5th-grade reading level). Avoid complex words, academic jargon, or advanced vocabulary. Keep the sentences short, engaging, and direct.
+    CRITICAL ENGAGEMENT AND STRUCTURE REQUIREMENTS:
+    1. Hook (Segment 1): Must begin with an immediate, high-retention hook (an intriguing, polarising, or curiosity-inducing question that stops the scroll).
+    2. Close (Final Segment): Must end with a compelling, open-ended question that drives comments, paired with a call to action asking the viewer to share/tag a friend.
+    3. Language: Write the spoken narration (`text_to_speak`) in very simple, clear, and easy-to-understand English (approx. 5th-grade reading level). Keep sentences short and direct.
     
-    Provide highly detailed, specific visual prompts for each segment that will be fed into an AI image generator.
+    Provide highly detailed, specific visual prompts for each segment that will be fed into an AI visual generator.
 
     Thought/Topic: {thought}
 
@@ -394,9 +397,9 @@ def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1
     return canvas
 
 
-def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", highlight_color_name="Yellow", position_name="Bottom", add_watermark=False):
+def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", highlight_color_name="Yellow", position_name="Bottom", add_watermark=False, is_last_segment=False):
     """
-    Draws custom styled highlighted subtitles and an optional brand watermark on a numpy video frame using PIL.
+    Draws custom styled highlighted subtitles, an optional brand watermark, and engagement overlays on a numpy video frame using PIL.
     """
     # Convert numpy frame (RGB) to Pillow Image
     pil_img = Image.fromarray(frame)
@@ -427,6 +430,36 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
             stroke_width=2,
             stroke_fill=(0, 0, 0, 100)
         )
+        
+    # 2. Draw Visual CTA Badge if it's the last segment (YouTube Friendly engagement card)
+    if is_last_segment:
+        card_w, card_h = 420, 65
+        card_x = (target_size[0] - card_w) / 2
+        card_y = 90
+        
+        # Draw semi-transparent card container with rounded corners and glowing indigo border
+        draw.rounded_rectangle(
+            [card_x, card_y, card_x + card_w, card_y + card_h],
+            radius=16,
+            fill=(0, 0, 0, 160),
+            outline=(99, 102, 241, 200),
+            width=2
+        )
+        
+        cta_text = "🔔 Share & Comment below!"
+        cta_font_path = "C:\\Windows\\Fonts\\arialbd.ttf"
+        try:
+            cta_font = ImageFont.truetype(cta_font_path, 26)
+        except Exception:
+            cta_font = ImageFont.load_default()
+            
+        txt_w = draw.textlength(cta_text, font=cta_font)
+        txt_x = card_x + (card_w - txt_w) / 2
+        txt_y = card_y + (card_h - 30) / 2
+        
+        # Text shadow and drawing
+        draw.text((txt_x + 2, txt_y + 2), cta_text, fill=(0, 0, 0, 200), font=cta_font)
+        draw.text((txt_x, txt_y), cta_text, fill=(255, 255, 255), font=cta_font)
         
     if not words:
         return np.array(pil_img)
@@ -680,10 +713,11 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                     word_timings = json.load(fj)
             
             # Dynamic subtitle & watermark frame processor function
-            def make_subtitle_filter(timings, size, font, color, pos, watermark):
+            is_last = (i == len(segments) - 1)
+            def make_subtitle_filter(timings, size, font, color, pos, watermark, is_last_seg):
                 def filter_func(get_frame, t):
                     frame = get_frame(t)
-                    return draw_text_on_frame(frame, t, timings, size, font, color, pos, watermark)
+                    return draw_text_on_frame(frame, t, timings, size, font, color, pos, watermark, is_last_seg)
                 return filter_func
             
             filter_to_apply = make_subtitle_filter(
@@ -692,7 +726,8 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                 font_name, 
                 highlight_color, 
                 caption_position, 
-                add_watermark
+                add_watermark,
+                is_last
             )
             
             if hasattr(img_clip, "transform"):
@@ -791,6 +826,22 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
                 print("Successfully mixed transition whoosh sound effects!")
         except Exception as we:
             print(f"Warning: Failed to mix transition whoosh sound effects: {we}")
+            
+    # Engagement Chime Notification SFX mixing for the final segment CTA
+    chime_sfx_path = "static/music/chime_notification.wav"
+    if os.path.exists(chime_sfx_path) and len(clip_start_times) > 0:
+        try:
+            chime_sfx = AudioFileClip(chime_sfx_path)
+            # Start chime exactly at the beginning of the last segment (CTA hook)
+            chime_start_t = clip_start_times[-1]
+            chime_clip = chime_sfx.with_start(chime_start_t)
+            
+            from moviepy.audio.AudioClip import CompositeAudioClip
+            mixed_audio = CompositeAudioClip([final_clip.audio, chime_clip])
+            final_clip = final_clip.with_audio(mixed_audio)
+            print("Successfully mixed final segment chime notification sound effect!")
+        except Exception as ce:
+            print(f"Warning: Failed to mix chime sound effect: {ce}")
             
     final_clip.write_videofile(
         output_path,
