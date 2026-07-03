@@ -125,7 +125,9 @@ async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-Gu
     Generates a voiceover .mp3 file for the given text using edge-tts.
     Also captures word timings and saves them as a JSON file.
     """
-    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
+    # Clean text of markdown characters like asterisks so TTS engine does not pronounce them literally
+    cleaned_text = text.replace("**", "").replace("*", "").replace("_", "").replace("`", "").strip()
+    communicate = edge_tts.Communicate(cleaned_text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
     words = []
     
     with open(output_path, "wb") as f:
