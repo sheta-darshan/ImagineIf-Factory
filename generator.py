@@ -370,10 +370,10 @@ def animate_image_replicate(image_path: str, prompt: str, output_path: str, aspe
     
     for attempt in range(max_retries):
         try:
-            # We open the local file directly. Replicate handles the binary stream upload.
+            model = replicate.models.get("lightricks/ltx-video")
             with open(image_path, "rb") as image_file:
                 prediction = replicate.predictions.create(
-                    model="lightricks/ltx-video",
+                    version=model.latest_version,
                     input={
                         "image": image_file,
                         "prompt": motion_prompt,

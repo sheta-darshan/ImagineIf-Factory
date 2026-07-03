@@ -658,6 +658,9 @@
                 <button class="btn" id="generate-assets-btn" onclick="generateAssets()">
                     Generate Voice & Images <span class="spinner" style="display:none;" id="assets-btn-spinner"></span>
                 </button>
+                <button class="btn" id="render-video-btn" onclick="renderVideo()" style="display: none; background: var(--accent); color: black;">
+                    Assemble Final Video 🚀
+                </button>
             </div>
             <div class="status-message" id="assets-status" style="display:none;"></div>
         </div>
@@ -1028,6 +1031,8 @@
                 seoDescription = data.description;
                 seoTags = data.tags;
 
+                document.getElementById("render-video-btn").style.display = "none";
+                document.getElementById("assets-status").style.display = "none";
                 renderStoryboardEditor();
                 goToStep(2);
             } catch (err) {
@@ -1240,7 +1245,10 @@
                     }
                 });
 
-                renderVideo();
+                // Clear generating status and expose compile button
+                spinner.style.display = "none";
+                status.innerHTML = `<span style="color:var(--accent); font-weight:700;">✓ Assets generated successfully!</span> Review the storyboard cards above. If everything looks good, click <b>"Assemble Final Video 🚀"</b> below to compile.`;
+                document.getElementById("render-video-btn").style.display = "inline-block";
             } catch (err) {
                 alert(`Error generating assets: ${err.message}`);
                 status.innerHTML = `<span style="color:#ef4444;">Asset Generation Failed: ${err.message}</span>`;
