@@ -34,6 +34,8 @@ class ScriptRequest(BaseModel):
     thought: str
     duration: int = 60
     visual_style: str = "Cinematic Photo"
+    imageModel: str = "schnell"
+    voice: str = "en-US-GuyNeural"
 
 class Segment(BaseModel):
     text_to_speak: str
@@ -182,7 +184,9 @@ async def api_generate_script(req: ScriptRequest):
             "videoUrl": "",
             "thought": req.thought,
             "duration": req.duration,
-            "visualStyle": req.visual_style
+            "visualStyle": req.visual_style,
+            "imageModel": req.imageModel,
+            "voice": req.voice
         }
         with open(f"outputs/{project_id}/metadata.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)

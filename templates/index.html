@@ -990,6 +990,8 @@
             const thought = document.getElementById("thought-input").value.trim();
             const duration = parseInt(document.getElementById("duration-input").value) || 30;
             const visual_style = document.getElementById("style-select").value;
+            const imageModel = document.getElementById("model-select").value;
+            const voice = document.getElementById("voice-select").value;
             
             if (!thought) {
                 alert("Please enter a concept or thought first.");
@@ -1009,7 +1011,7 @@
                 const response = await fetch("/api/generate-script", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ thought, duration, visual_style })
+                    body: JSON.stringify({ thought, duration, visual_style, imageModel, voice })
                 });
 
                 if (!response.ok) {
