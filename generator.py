@@ -537,6 +537,12 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         font_name = "Impact"
     elif caption_preset == "cyberpunk":
         font_name = "Courier Bold"
+    elif caption_preset == "hormozi":
+        font_name = "Impact"
+    elif caption_preset == "abdaal":
+        font_name = "Arial Bold"
+    elif caption_preset == "tiktok":
+        font_name = "Arial Bold"
         
     font_file = font_paths.get(font_name, font_paths["Arial Bold"])
     
@@ -622,7 +628,7 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
                 
         # Transform text based on context
         display_text = w_text
-        if caption_preset == "mrbeast":
+        if caption_preset in ["mrbeast", "hormozi", "tiktok"]:
             display_text = w_text.upper()
         else:
             if is_active and "!" in w_text:
@@ -633,9 +639,8 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         w_width = draw.textlength(display_text, font=word_font)
         
         # Determine Color based on spoken expression
-        word_color = (255, 255, 255)
         if is_active:
-            if caption_preset == "mrbeast":
+            if caption_preset in ["mrbeast", "hormozi"]:
                 # Alternate Yellow and Neon Green for active words
                 word_color = (255, 255, 0) if (active_word_idx % 2 == 0) else (57, 255, 20)
             elif caption_preset == "minimalist":
@@ -643,6 +648,10 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
             elif caption_preset == "cyberpunk":
                 # Alternate Neon Cyan and Neon Magenta for active words
                 word_color = (0, 255, 255) if (active_word_idx % 2 == 0) else (255, 0, 255)
+            elif caption_preset == "abdaal":
+                word_color = (85, 239, 196)  # Mint Green highlight
+            elif caption_preset == "tiktok":
+                word_color = (255, 215, 0)  # Gold Yellow highlight
             else:
                 if "!" in w_text:
                     word_color = (255, 69, 0)  # Red-Orange for high excitement!
@@ -652,6 +661,11 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
                     word_color = (219, 112, 147)  # Pink-Violet for pauses...
                 else:
                     word_color = highlight_rgb
+        else:
+            if caption_preset in ["hormozi", "mrbeast", "tiktok"]:
+                word_color = (220, 220, 220)  # Light gray for un-spoken words to enhance active focus!
+            else:
+                word_color = (255, 255, 255)
                 
         words_metadata.append({
             "text": display_text,
@@ -683,20 +697,37 @@ def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", hig
         if scale > 1.0:
             y_offset = -int((font_size * (scale - 1.0)) / 2)
             
-        # Draw 3D Drop Shadow first (except for minimalist)
-        if caption_preset != "minimalist":
-            shadow_offset = int(3 * scale)
+        # Draw 3D Drop Shadow first (except for minimalist/abdaal)
+        if caption_preset not in ["minimalist", "abdaal"]:
+            shadow_offset = int(5 * scale) if caption_preset in ["hormozi", "mrbeast"] else int(3 * scale)
             draw.text(
                 (curr_x + shadow_offset, y_pos + y_offset + shadow_offset), 
                 text, 
                 fill=(0, 0, 0, 180),
                 font=word_font, 
-                stroke_width=int(4 * scale), 
+                stroke_width=int(5 * scale) if caption_preset in ["hormozi", "mrbeast"] else int(4 * scale), 
                 stroke_fill=(0, 0, 0)
+            )
+        elif caption_preset == "abdaal":
+            # Soft smooth drop shadow for clean academic aesthetic
+            shadow_offset = int(2 * scale)
+            draw.text(
+                (curr_x + shadow_offset, y_pos + y_offset + shadow_offset), 
+                text, 
+                fill=(0, 0, 0, 100),
+                font=word_font
             )
             
         # Draw Main Highlighted Text
-        outline_w = int(1.5 * scale) if caption_preset == "minimalist" else int(4 * scale)
+        if caption_preset == "minimalist":
+            outline_w = int(1.5 * scale)
+        elif caption_preset == "abdaal":
+            outline_w = 0  # No harsh borders for Abdaal
+        elif caption_preset in ["hormozi", "mrbeast", "tiktok"]:
+            outline_w = int(5 * scale)  # Extra heavy border for creator pop
+        else:
+            outline_w = int(4 * scale)
+            
         draw.text(
             (curr_x, y_pos + y_offset), 
             text, 
