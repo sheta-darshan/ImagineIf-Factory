@@ -143,6 +143,12 @@ async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-Gu
                     "end": start + duration
                 })
                 
+    # Restore original punctuation (like ? and !) stripped by edge-tts WordBoundary text
+    original_words = cleaned_text.split()
+    for idx, w in enumerate(words):
+        if idx < len(original_words):
+            w["word"] = original_words[idx]
+            
     # Save word timings to a JSON file alongside the audio
     json_path = output_path.replace(".mp3", ".json")
     with open(json_path, "w", encoding="utf-8") as fj:
