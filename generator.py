@@ -456,7 +456,7 @@ def generate_thumbnail(project_id: str, prompt: str, text_overlay: str, aspect_r
     # Fallback to Schnell if Replicate is unconfigured
     print(f"Generating thumbnail background for project {project_id}...")
     try:
-        generate_image_replicate(prompt, temp_bg_path, aspect_ratio=aspect_ratio, model="dev")
+        generate_image_replicate(prompt, temp_bg_path, aspect_ratio=aspect_ratio, image_model="dev")
     except Exception as e:
         print(f"Error generating Replicate thumbnail background: {e}")
         
