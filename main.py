@@ -223,6 +223,7 @@ async def api_generate_assets(req: AssetRequest):
                 meta = json.load(f)
             meta["aspectRatio"] = req.aspectRatio
             meta["status"] = "assets_generated"
+            meta["imageModel"] = req.imageModel
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=2)
         except Exception as e:
@@ -259,11 +260,13 @@ async def api_generate_assets(req: AssetRequest):
                 # Add a 10.0 second pause between generations to stay within Replicate's 6/min rate limit
                 await asyncio.sleep(10.0)
                 if req.imageModel == "video":
+                    # Generate a cheap, fast static image preview first!
                     return await asyncio.to_thread(
-                        generator.generate_video_replicate, 
+                        generator.generate_image_replicate, 
                         seg.visual_prompt, 
                         image_path_raw,
-                        req.aspectRatio
+                        req.aspectRatio,
+                        "schnell"
                     )
                 else:
                     return await asyncio.to_thread(
@@ -319,7 +322,10 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
                 meta = json.load(f)
+            meta["imageModel"] = req.imageModel
             visual_style = meta.get("visualStyle", "Cinematic Photo")
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
         except Exception:
             pass
     rate_str, pitch_str = get_voice_settings_for_style(visual_style)
@@ -340,11 +346,13 @@ async def api_regenerate_segment(req: RegenerateSegmentRequest):
         if req.regenerateImage:
             async def run_image():
                 if req.imageModel == "video":
+                    # Generate a cheap, fast static image preview first!
                     return await asyncio.to_thread(
-                        generator.generate_video_replicate,
+                        generator.generate_image_replicate,
                         req.visualPrompt,
                         image_path_raw,
-                        req.aspectRatio
+                        req.aspectRatio,
+                        "schnell"
                     )
                 else:
                     return await asyncio.to_thread(

@@ -346,6 +346,94 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
         print(f"Replicate video processing failed ({e}). Falling back to static image...")
         return generate_image_replicate(prompt, output_path, aspect_ratio)
 
+def animate_image_replicate(image_path: str, prompt: str, output_path: str, aspect_ratio: str = "9:16") -> str:
+    """
+    Takes a static image and animates it using lightricks/ltx-video Image-to-Video on Replicate.
+    Saves the resulting .mp4 file.
+    """
+    token = os.getenv("REPLICATE_API_TOKEN")
+    if not token or "your_" in token.lower():
+        print("Replicate token not configured for video animation. Falling back to static panning.")
+        return image_path
+        
+    if not os.path.exists(image_path):
+        print(f"Error: Static image '{image_path}' not found for animation. Falling back.")
+        return image_path
+        
+    max_retries = 3
+    output = None
+    
+    # Standard LTX-Video motion prompting
+    motion_prompt = f"{prompt}, smooth cinematic slow motion, panning camera, realistic physics"
+    
+    for attempt in range(max_retries):
+        try:
+            # We open the local file directly. Replicate handles the binary stream upload.
+            with open(image_path, "rb") as image_file:
+                prediction = replicate.predictions.create(
+                    model="lightricks/ltx-video",
+                    input={
+                        "image": image_file,
+                        "prompt": motion_prompt,
+                        "image_noise_scale": 0.15,
+                        "negative_prompt": "low quality, blurry, static, watermark"
+                    }
+                )
+                
+            # Poll status up to 3 minutes
+            import time
+            start_poll = time.time()
+            while prediction.status not in ["succeeded", "failed", "canceled"]:
+                if time.time() - start_poll > 180:
+                    raise TimeoutError("LTX-Video Image-to-Video prediction timed out.")
+                time.sleep(3)
+                prediction.reload()
+                
+            if prediction.status == "succeeded":
+                output = prediction.output
+                break
+            else:
+                raise RuntimeError(f"Prediction failed with status: {prediction.status}")
+        except Exception as e:
+            error_msg = str(e)
+            is_429 = "429" in error_msg or "throttled" in error_msg.lower()
+            if is_429 and attempt < max_retries - 1:
+                wait_time = 15 + attempt * 5
+                print(f"Replicate rate limit hit. Waiting {wait_time}s before retry (Attempt {attempt+1}/{max_retries})...")
+                import time
+                time.sleep(wait_time)
+            else:
+                print(f"Replicate image animation failed ({e}). Falling back to static panning.")
+                return image_path
+                
+    if not output:
+        print("Replicate video returned no output. Falling back to static panning.")
+        return image_path
+        
+    try:
+        video_url = output
+        if isinstance(output, list):
+            video_url = output[0]
+            
+        if hasattr(video_url, "read"):
+            content = video_url.read()
+        else:
+            url_str = video_url.url if hasattr(video_url, "url") else str(video_url)
+            import httpx
+            response = httpx.get(url_str, timeout=45.0)
+            if response.status_code != 200:
+                raise RuntimeError(f"Failed to download animated video from {url_str}")
+            content = response.content
+            
+        mp4_path = os.path.splitext(output_path)[0] + "_animated.mp4"
+        with open(mp4_path, "wb") as f:
+            f.write(content)
+        print(f"Successfully generated animated clip: {mp4_path}")
+        return mp4_path
+    except Exception as e:
+        print(f"Replicate video processing failed ({e}). Falling back to static panning.")
+        return image_path
+
 def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> VideoClip:
     """
     Creates an animated VideoClip with ultra-smooth PIL-based Ken Burns animations (zoom_in, zoom_out, pan_left, pan_right).
@@ -803,6 +891,30 @@ def assemble_video(segments: list, output_path: str, aspect_ratio: str = "16:9",
         duration = audio_clip.duration
         clip_start_times.append(curr_start)
         
+        # Check if project intends to generate AI Video from static preview images
+        is_video_intent = False
+        if audio_path:
+            project_dir = os.path.dirname(audio_path)
+            meta_path = os.path.join(project_dir, "metadata.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    if meta.get("imageModel") == "video":
+                        is_video_intent = True
+                except Exception:
+                    pass
+
+        if is_video_intent and img_path and not img_path.lower().endswith(".mp4"):
+            animated_mp4_path = os.path.splitext(img_path)[0] + "_animated.mp4"
+            if os.path.exists(animated_mp4_path):
+                img_path = animated_mp4_path
+            else:
+                print(f"Animating segment {i} static image using LTX-Video...")
+                animated_mp4 = animate_image_replicate(img_path, seg.get("visual_prompt", ""), img_path, aspect_ratio=aspect_ratio)
+                if os.path.exists(animated_mp4):
+                    img_path = animated_mp4
+
         is_video_asset = img_path.lower().endswith(".mp4") if img_path else False
         if is_video_asset:
             try:
