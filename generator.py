@@ -346,11 +346,15 @@ def generate_video_replicate(prompt: str, output_path: str, aspect_ratio: str = 
         print(f"Replicate video processing failed ({e}). Falling back to static image...")
         return generate_image_replicate(prompt, output_path, aspect_ratio)
 
-def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> ImageClip:
+def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> VideoClip:
     """
-    Creates an ImageClip with varied Ken Burns animations: zoom_in, zoom_out, pan_left, pan_right.
-    Falls back to a solid slate background canvas if the image file is missing or invalid.
+    Creates an animated VideoClip with ultra-smooth PIL-based Ken Burns animations (zoom_in, zoom_out, pan_left, pan_right).
+    Fits the target aspect ratio perfectly and avoids stutters or black bars.
     """
+    import numpy as np
+    from PIL import Image
+    from moviepy.video.VideoClip import VideoClip
+    
     if not image_path or not os.path.exists(image_path):
         print(f"Warning: Image asset '{image_path}' not found. Generating solid slate canvas fallback.")
         fallback_img = Image.new("RGB", target_size, color=(15, 23, 42))  # Slate dark background
@@ -360,59 +364,76 @@ def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1
         fallback_img.save(temp_file.name, "JPEG")
         image_path = temp_file.name
         
-    with Image.open(image_path) as img:
-        img_w, img_h = img.size
+    try:
+        img_source = Image.open(image_path).convert("RGB")
+    except Exception as e:
+        print(f"Error opening image {image_path}: {e}. Falling back to solid canvas.")
+        img_source = Image.new("RGB", target_size, color=(15, 23, 42))
+        
+    img_w, img_h = img_source.size
+    target_ratio = target_size[0] / target_size[1]
     
-    clip = ImageClip(image_path).with_duration(duration)
-    
-    # Base scale factor to cover the canvas completely
-    base_scale = max(target_size[0]/img_w, target_size[1]/img_h)
-    
-    if motion_type == "zoom_in":
-        base_w, base_h = int(img_w * base_scale), int(img_h * base_scale)
-        clip = clip.resized((base_w, base_h))
-        zoom_speed = 0.08 / duration
-        animated_clip = clip.resized(lambda t: 1.0 + zoom_speed * t)
-        pos_func = "center"
-        
-    elif motion_type == "zoom_out":
-        base_w, base_h = int(img_w * base_scale), int(img_h * base_scale)
-        clip = clip.resized((base_w, base_h))
-        zoom_speed = 0.08 / duration
-        # Start at 1.08 and scale down to 1.0
-        animated_clip = clip.resized(lambda t: 1.08 - zoom_speed * t)
-        pos_func = "center"
-        
-    elif motion_type == "pan_left":
-        # Scale slightly larger (1.12x) to allow horizontal panning room
-        scale_factor = base_scale * 1.12
-        base_w, base_h = int(img_w * scale_factor), int(img_h * scale_factor)
-        clip = clip.resized((base_w, base_h))
-        
-        max_pan_x = base_w - target_size[0]
-        # Panning function: start on right side (max_pan_x) and translate left to 0
-        pos_func = lambda t: (int(max_pan_x - (max_pan_x / duration) * t), "center")
-        animated_clip = clip
-        
-    elif motion_type == "pan_right":
-        scale_factor = base_scale * 1.12
-        base_w, base_h = int(img_w * scale_factor), int(img_h * scale_factor)
-        clip = clip.resized((base_w, base_h))
-        
-        max_pan_x = base_w - target_size[0]
-        # Panning function: start on left side (0) and translate right to max_pan_x
-        pos_func = lambda t: (int((max_pan_x / duration) * t), "center")
-        animated_clip = clip
-        
+    # Calculate max crop size fitting the target aspect ratio
+    if img_w / img_h > target_ratio:
+        crop_h = img_h
+        crop_w = img_h * target_ratio
     else:
-        # Fallback to standard center crop
-        base_w, base_h = int(img_w * base_scale), int(img_h * base_scale)
-        clip = clip.resized((base_w, base_h))
-        animated_clip = clip
-        pos_func = "center"
+        crop_w = img_w
+        crop_h = img_w / target_ratio
         
-    canvas = CompositeVideoClip([animated_clip.with_position(pos_func)], size=target_size).with_duration(duration)
-    return canvas
+    center_x = img_w / 2.0
+    center_y = img_h / 2.0
+    
+    def make_frame(t):
+        p = min(1.0, max(0.0, t / duration))
+        
+        if motion_type == "zoom_in":
+            # Zoom in from 100% of max crop box down to 88%
+            s = 1.0 - 0.12 * p
+            w = crop_w * s
+            h = crop_h * s
+            x0 = center_x - w / 2.0
+            y0 = center_y - h / 2.0
+            
+        elif motion_type == "zoom_out":
+            # Zoom out from 88% of max crop box up to 100%
+            s = 0.88 + 0.12 * p
+            w = crop_w * s
+            h = crop_h * s
+            x0 = center_x - w / 2.0
+            y0 = center_y - h / 2.0
+            
+        elif motion_type == "pan_left":
+            # Slight zoom-in (92%) to allow panning room, move right to left
+            w = crop_w * 0.92
+            h = crop_h * 0.92
+            span_x = img_w - w
+            curr_center_x = (img_w - w / 2.0) - p * span_x if span_x > 0 else center_x
+            x0 = curr_center_x - w / 2.0
+            y0 = center_y - h / 2.0
+            
+        elif motion_type == "pan_right":
+            # Slight zoom-in (92%) to allow panning room, move left to right
+            w = crop_w * 0.92
+            h = crop_h * 0.92
+            span_x = img_w - w
+            curr_center_x = (w / 2.0) + p * span_x if span_x > 0 else center_x
+            x0 = curr_center_x - w / 2.0
+            y0 = center_y - h / 2.0
+            
+        else:
+            w = crop_w
+            h = crop_h
+            x0 = center_x - w / 2.0
+            y0 = center_y - h / 2.0
+            
+        # Crop and resize with BILINEAR interpolation for smooth anti-aliased sub-pixel rendering
+        cropped = img_source.crop((int(x0), int(y0), int(x0 + w), int(y0 + h)))
+        resized = cropped.resize(target_size, Image.Resampling.BILINEAR)
+        return np.array(resized)
+        
+    animated_clip = VideoClip(make_frame, duration=duration)
+    return animated_clip
 
 
 def draw_text_on_frame(frame, t, words, target_size, font_name="Arial Bold", highlight_color_name="Yellow", position_name="Bottom", add_watermark=False, is_last_segment=False, caption_preset="default"):
