@@ -366,7 +366,7 @@ def animate_image_replicate(image_path: str, prompt: str, output_path: str, aspe
     output = None
     
     # Standard LTX-Video motion prompting
-    motion_prompt = f"{prompt}, smooth cinematic slow motion, panning camera, realistic physics"
+    motion_prompt = f"{prompt}, cinematic slow motion, dramatic camera pan, active movement, wind blowing, dust particles drifting, highly dynamic, realistic physics"
     
     for attempt in range(max_retries):
         try:
@@ -377,8 +377,9 @@ def animate_image_replicate(image_path: str, prompt: str, output_path: str, aspe
                     input={
                         "image": image_file,
                         "prompt": motion_prompt,
-                        "image_noise_scale": 0.15,
-                        "negative_prompt": "low quality, blurry, static, watermark"
+                        "image_noise_scale": 0.22,
+                        "steps": 30,
+                        "negative_prompt": "low quality, blurry, static, watermark, deformed, distorted"
                     }
                 )
                 
