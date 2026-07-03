@@ -60,6 +60,8 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
       "title": "a catchy, click-worthy, algorithm-friendly YouTube title based on the topic",
       "description": "an SEO-optimized YouTube description containing a compelling summary, call to action, and timestamp chapters (e.g. 00:00 - Introduction, etc.)",
       "tags": "a comma-separated string of relevant hashtags and search tags",
+      "thumbnail_prompt": "An expanded, highly detailed cinematic visual prompt for generating a click-worthy YouTube thumbnail (16:9 aspect ratio). Describe an epic, high-contrast, uncluttered scene with a strong central subject. Focus on dramatic lighting and professional framing that immediately captures attention.",
+      "thumbnail_text": "A short, extremely punchy, high-curiosity 3 to 4 word phrase to overlay on the thumbnail in bold uppercase letters (e.g., 'TIME RAN OUT!', 'GRAVITY FAILS!', 'DON'T CLICK!'). Keep it short and dramatic.",
       "segments": [
          {{
            "text_to_speak": "spoken narration text for this segment, written in simple and clear English",
@@ -433,6 +435,130 @@ def animate_image_replicate(image_path: str, prompt: str, output_path: str, aspe
     except Exception as e:
         print(f"Replicate video processing failed ({e}). Falling back to static panning.")
         return image_path
+
+def generate_thumbnail(project_id: str, prompt: str, text_overlay: str, aspect_ratio: str = "16:9") -> str:
+    """
+    Generates a widescreen thumbnail background using Flux Dev on Replicate,
+    then overlays high-contrast bold 3D text in a dynamic rotation.
+    Saves the final thumbnail to outputs/{project_id}/thumbnail.jpg.
+    """
+    import os
+    import math
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    
+    project_dir = f"outputs/{project_id}"
+    os.makedirs(project_dir, exist_ok=True)
+    temp_bg_path = f"{project_dir}/temp_thumb_bg.jpg"
+    final_thumb_path = f"{project_dir}/thumbnail.jpg"
+    
+    # 1. Generate high-quality thumbnail background using Flux Dev (Replicate)
+    # Fallback to Schnell if Replicate is unconfigured
+    print(f"Generating thumbnail background for project {project_id}...")
+    try:
+        generate_image_replicate(prompt, temp_bg_path, aspect_ratio=aspect_ratio, model="dev")
+    except Exception as e:
+        print(f"Error generating Replicate thumbnail background: {e}")
+        
+    if not os.path.exists(temp_bg_path):
+        # Create fallback dark slate background
+        print("Warning: Thumbnail background generation failed. Using dark gradient fallback canvas.")
+        bg_img = Image.new("RGB", (1280, 720), color=(15, 23, 42))
+    else:
+        try:
+            bg_img = Image.open(temp_bg_path).convert("RGB")
+            # Resize to standard YouTube thumbnail resolution
+            bg_img = bg_img.resize((1280, 720), Image.Resampling.LANCZOS)
+        except Exception as e:
+            print(f"Error reading background file: {e}. Using slate fallback.")
+            bg_img = Image.new("RGB", (1280, 720), color=(15, 23, 42))
+        
+    draw = ImageDraw.Draw(bg_img)
+    
+    # 2. Draw Bold rotated text overlay
+    clean_text = text_overlay.upper().strip()
+    
+    if clean_text:
+        # Load heavy font (Impact is standard for YouTube thumbnails)
+        font_path = "C:\\Windows\\Fonts\\impact.ttf"
+        try:
+            # High-resolution font size for thumbnail (e.g. size 90)
+            font_size = 90
+            font = ImageFont.truetype(font_path, font_size)
+        except Exception:
+            font = ImageFont.load_default()
+            font_size = 32
+            
+        # Draw on a separate layer to allow rotation
+        text_layer = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
+        layer_draw = ImageDraw.Draw(text_layer)
+        
+        # Word wrap text if it is too long (split into 2 lines)
+        words = clean_text.split()
+        lines = []
+        if len(words) > 2:
+            lines.append(" ".join(words[:len(words)//2]))
+            lines.append(" ".join(words[len(words)//2:]))
+        else:
+            lines.append(clean_text)
+            
+        # Draw each line on the overlay layer centered
+        total_h = len(lines) * (font_size + 15)
+        start_y = (720 - total_h) / 2
+        
+        for idx, line_text in enumerate(lines):
+            line_w = layer_draw.textlength(line_text, font=font)
+            line_x = (1280 - line_w) / 2
+            line_y = start_y + idx * (font_size + 15)
+            
+            # Draw heavy black 3D Drop Shadow first
+            shadow_offset = 8
+            layer_draw.text(
+                (line_x + shadow_offset, line_y + shadow_offset),
+                line_text,
+                fill=(0, 0, 0, 240),
+                font=font,
+                stroke_width=12,
+                stroke_fill=(0, 0, 0)
+            )
+            
+            # Draw heavy black border
+            layer_draw.text(
+                (line_x, line_y),
+                line_text,
+                fill=(255, 255, 255),
+                font=font,
+                stroke_width=12,
+                stroke_fill=(0, 0, 0)
+            )
+            
+            # Draw main text in bright contrasting Yellow
+            layer_draw.text(
+                (line_x, line_y),
+                line_text,
+                fill=(255, 255, 0), # Bright YouTube Yellow
+                font=font,
+                stroke_width=4,
+                stroke_fill=(0, 0, 0)
+            )
+            
+        # Rotate the text layer slightly (-5 degrees) for a dynamic clicky feel
+        rotated_layer = text_layer.rotate(-5, resample=Image.Resampling.BICUBIC, expand=False)
+        
+        # Composite the rotated text layer over the background image
+        bg_img.paste(rotated_layer, (0, 0), rotated_layer)
+        
+    # Save the completed thumbnail
+    bg_img.save(final_thumb_path, "JPEG", quality=95)
+    
+    # Clean up temp background image
+    if os.path.exists(temp_bg_path):
+        try:
+            os.remove(temp_bg_path)
+        except Exception:
+            pass
+            
+    print(f"Click-worthy thumbnail successfully compiled at: {final_thumb_path}")
+    return final_thumb_path
 
 def create_ken_burns_clip(image_path: str, duration: float, target_size=(1920, 1080), motion_type: str = "zoom_in") -> VideoClip:
     """

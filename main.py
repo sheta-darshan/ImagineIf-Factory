@@ -174,6 +174,8 @@ async def api_generate_script(req: ScriptRequest):
             "title": data.get("title", ""),
             "description": data.get("description", ""),
             "tags": data.get("tags", ""),
+            "thumbnail_prompt": data.get("thumbnail_prompt", ""),
+            "thumbnail_text": data.get("thumbnail_text", ""),
             "timestamp": int(time.time()),
             "status": "script_generated",
             "aspectRatio": "",
@@ -454,22 +456,45 @@ async def api_render_video(req: RenderRequest):
             req.captionPreset
         )
         
-        # Update project metadata
+        # Update project metadata and generate thumbnail
         meta_path = f"{project_dir}/metadata.json"
+        thumbnail_url = ""
         if os.path.exists(meta_path):
             try:
                 with open(meta_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
+                
+                # Fetch brainstormed thumbnail parameters
+                thumb_prompt = meta.get("thumbnail_prompt", "")
+                thumb_text = meta.get("thumbnail_text", "")
+                
+                # Fallbacks if metadata keys aren't set
+                if not thumb_prompt:
+                    thumb_prompt = f"YouTube video thumbnail for scenario: {meta.get('thought', 'Imagine if')}, high-contrast cinematic, epic perspective"
+                if not thumb_text:
+                    thumb_text = meta.get("title", "IMAGINE IF!")[:20]
+                
+                # Generate thumbnail using Replicate Flux Dev
+                await asyncio.to_thread(
+                    generator.generate_thumbnail,
+                    project_id,
+                    thumb_prompt,
+                    thumb_text
+                )
+                thumbnail_url = f"outputs/{project_id}/thumbnail.jpg"
+                
                 meta["status"] = "rendered"
                 meta["videoUrl"] = f"outputs/{project_id}/final_video.mp4"
+                meta["thumbnailUrl"] = thumbnail_url
                 with open(meta_path, "w", encoding="utf-8") as f:
                     json.dump(meta, f, indent=2)
             except Exception as e:
-                print(f"Error updating metadata during render: {e}")
+                print(f"Error updating metadata or generating thumbnail: {e}")
                 
         return {
             "projectId": project_id,
-            "video_url": f"outputs/{project_id}/final_video.mp4"
+            "video_url": f"outputs/{project_id}/final_video.mp4",
+            "thumbnail_url": thumbnail_url
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to render video: {str(e)}")
