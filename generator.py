@@ -357,7 +357,11 @@ def generate_image_replicate(prompt: str, output_path: str, aspect_ratio: str = 
         with Image.open(output_path) as img:
             jpg_path = os.path.splitext(output_path)[0] + ".jpg"
             img.convert("RGB").save(jpg_path, "JPEG")
-            os.remove(output_path)  # remove old WebP
+            if output_path != jpg_path:
+                try:
+                    os.remove(output_path)  # remove old WebP
+                except Exception:
+                    pass
             return jpg_path
     except Exception as e:
         print(f"Replicate download/processing failed ({e}). Falling back to Pollinations.ai...")
