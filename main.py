@@ -142,6 +142,17 @@ async def api_daily_topic():
         print(f"Error parsing calendar: {e}")
         return {"topic": "Imagine if space travel was as cheap as buying a bus ticket."}
 
+@app.get("/api/trending-topics")
+async def api_trending_topics():
+    """
+    Step 1.5: Brainstorms trending topics using live Google Search grounding.
+    """
+    try:
+        topics = await generator.brainstorm_trending_topics()
+        return {"status": "success", "topics": topics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.delete("/api/delete-project/{projectId}")
 async def api_delete_project(projectId: str):
     """

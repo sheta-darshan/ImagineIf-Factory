@@ -122,6 +122,99 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
         print(f"Error parsing JSON from Gemini: {e}. Raw response: {response.text}")
         raise e
 
+async def brainstorm_trending_topics() -> list:
+    """
+    Queries Gemini with Google Search tool enabled to retrieve current global web/YouTube trends.
+    Transforms appropriate trends into high-impact speculative 'Imagine If...' topic proposals.
+    Returns a list of dictionaries with 'trend_name', 'concept', and 'reason'.
+    """
+    global client
+    if not client:
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        
+    prompt = """
+    Identify 5 highly active trending topics on YouTube, the internet, or global news today (specifically focusing on science, technology, space exploration, artificial intelligence, speculative futures, mystery, or interesting news).
+    
+    For each identified trending topic, create a corresponding "Imagine If" or "What If" storytelling concept tailored for our channel "Imagine If Factory". 
+    
+    Our channel niche:
+    - Channel Name: Imagine If Factory
+    - Content Pattern: Immersive sci-fi or speculative what-if storytelling.
+    - Style: High-impact, engaging narrative hooks, curiosity-inducing concepts, alternate realities, or futuristic scenarios.
+    
+    Transformation instructions:
+    - Never copy the trending topic directly.
+    - Transform the trend into a creative, fictional, or highly speculative scenario.
+    - Example Trend: "AI replacing jobs" -> Concept: "Imagine If Humans Had to Compete Against AI for Survival"
+    - Example Trend: "New Exoplanet Discovered" -> Concept: "Imagine If Humans Found Another Earth Tomorrow"
+    
+    Return exactly a JSON list of objects, where each object contains exactly these keys:
+    - "trend_name": The real-world trending topic/headline (e.g., "NASA James Webb discovers water vapor on rocky exoplanet")
+    - "concept": The transformed speculative "Imagine If" concept headline (e.g., "Imagine If a Mysterious Ocean World Was Discovered Right Next Door")
+    - "reason": A short 1-sentence explanation of why this topic fits the channel and will attract high views right now.
+    
+    Respond strictly in JSON format. Do not wrap in markdown or any other tags outside of the JSON array.
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())]
+            )
+        )
+        
+        resp_text = response.text.strip()
+        if resp_text.startswith("```"):
+            lines = resp_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            resp_text = "\n".join(lines).strip()
+            
+        data = json.loads(resp_text)
+        if isinstance(data, list):
+            return data
+        elif isinstance(data, dict) and "trends" in data:
+            return data["trends"]
+        elif isinstance(data, dict):
+            for key, val in data.items():
+                if isinstance(val, list):
+                    return val
+            return [data]
+        return []
+    except Exception as e:
+        print(f"Error brainstorming trending topics: {e}")
+        return [
+            {
+                "trend_name": "AI Superintelligence developments",
+                "concept": "Imagine If AI Achieved Consciousness Tonight",
+                "reason": "AI consciousness is a highly debated viral trend that matches our sci-fi storytelling style perfectly."
+            },
+            {
+                "trend_name": "Climate change and ocean warming",
+                "concept": "Imagine If the Oceans Completely Evaporated Tomorrow",
+                "reason": "Dramatic environmental survival scenarios capture high viewer retention and spark comments."
+            },
+            {
+                "trend_name": "Space colonization Mars missions",
+                "concept": "Imagine If Mars Colonists Discovered an Ancient Alien Base",
+                "reason": "Mars discovery news is highly searched, and an alien mystery twist fits the channel's Ghibli/retro vibe."
+            },
+            {
+                "trend_name": "Quantum computing advances",
+                "concept": "Imagine If You Could Access Parallel Universes Using a Computer",
+                "reason": "Quantum tech advances make multiverse stories feel grounded and scientifically intriguing."
+            },
+            {
+                "trend_name": "Deep-sea exploration discoveries",
+                "concept": "Imagine If a Giant Bioluminescent Civilization Lived at the Bottom of the Mariana Trench",
+                "reason": "Deep sea discovery feeds curiosity and provides highly aesthetic visual opportunities for Flux."
+            }
+        ]
+
 async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-GuyNeural", rate: str = "+0%", pitch: str = "+0Hz"):
     """
     Generates a voiceover .mp3 file for the given text using edge-tts.

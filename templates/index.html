@@ -527,11 +527,26 @@
         <!-- STEP 1: CONCEPT INPUT -->
         <div class="glass-panel step-content active" id="step-content-1">
             <div class="form-group">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap; gap:0.5rem;">
                     <label for="thought-input" style="margin-bottom:0;">Enter your thought / story concept</label>
-                    <button class="btn" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.25); box-shadow:none;" onclick="loadDailyTopic()" id="daily-topic-btn">📅 Surprise Me (365 Calendar)</button>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button class="btn" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem; background:rgba(99, 102, 241, 0.15); border:1px solid rgba(99, 102, 241, 0.25); box-shadow:none;" onclick="loadDailyTopic()" id="daily-topic-btn">📅 Surprise Me</button>
+                        <button class="btn" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem; background:rgba(244, 63, 94, 0.15); border:1px solid rgba(244, 63, 94, 0.25); box-shadow:none; color:#fb7185;" onclick="toggleTrendingPanel()" id="trending-topic-btn">🔥 Trending Ideas</button>
+                    </div>
                 </div>
                 <textarea id="thought-input" placeholder="e.g. In the distant future, gravity is controlled by giant floating clockwork spheres. A lone engineer discovers one is ticking backwards, threatening to crush the city."></textarea>
+            </div>
+            
+            <!-- Trending Topics Panel -->
+            <div id="trending-ideas-panel" style="display:none; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:12px; padding:1.25rem; margin-bottom:1.5rem; animation:fadeIn 0.3s ease;">
+                <h4 style="margin-top:0; font-family:'Outfit', sans-serif; font-size:1.1rem; color:var(--accent); display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <span>🔥 YouTube Live Trends Transformed</span>
+                    <button onclick="toggleTrendingPanel()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.25rem;">&times;</button>
+                </h4>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem; margin-top:0;">We searched YouTube's live trending feed, filtered topics fitting <b>Imagine If Factory's</b> niche, and transformed them into speculative storytelling concepts:</p>
+                <div id="trending-list" style="display:flex; flex-direction:column; gap:0.75rem;">
+                    <!-- Items will be injected here dynamically -->
+                </div>
             </div>
             
             <div class="row">
@@ -1443,6 +1458,70 @@
             } finally {
                 btn.disabled = false;
                 btn.innerText = originalText;
+            }
+        }
+
+        let isFetchingTrends = false;
+        function toggleTrendingPanel() {
+            const panel = document.getElementById("trending-ideas-panel");
+            if (panel.style.display === "none") {
+                panel.style.display = "block";
+                fetchTrendingTopics();
+            } else {
+                panel.style.display = "none";
+            }
+        }
+
+        async function fetchTrendingTopics() {
+            if (isFetchingTrends) return;
+            const container = document.getElementById("trending-list");
+            container.innerHTML = `<div style="display:flex; align-items:center; gap:0.5rem; font-size:0.9rem; color:var(--text-muted); padding:1rem 0;"><span class="spinner"></span> Querying live trends & brainstorming storytelling angles...</div>`;
+            
+            isFetchingTrends = true;
+            try {
+                const response = await fetch("/api/trending-topics");
+                if (!response.ok) throw new Error("Failed to load trending topics");
+                
+                const data = await response.json();
+                if (data.status === "success" && data.topics && data.topics.length > 0) {
+                    container.innerHTML = "";
+                    data.topics.forEach(item => {
+                        const div = document.createElement("div");
+                        div.style.cssText = "background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:0.85rem; border-radius:8px; cursor:pointer; transition:all 0.2s ease;";
+                        div.className = "trending-item-card";
+                        
+                        div.innerHTML = `
+                            <div style="font-weight:700; color:white; font-size:0.95rem; margin-bottom:0.25rem;">${item.concept}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); display:flex; gap:0.5rem; margin-bottom:0.25rem;">
+                                <span>📈 Based on: <strong style="color:var(--accent);">${item.trend_name}</strong></span>
+                            </div>
+                            <div style="font-size:0.8rem; color:#a1a1aa; font-style:italic;">💡 Why it works: ${item.reason}</div>
+                        `;
+                        
+                        div.addEventListener("click", () => {
+                            document.getElementById("thought-input").value = item.concept;
+                            document.getElementById("thought-input").focus();
+                            toggleTrendingPanel();
+                        });
+                        
+                        div.addEventListener("mouseenter", () => {
+                            div.style.background = "rgba(99, 102, 241, 0.1)";
+                            div.style.borderColor = "rgba(99, 102, 241, 0.3)";
+                        });
+                        div.addEventListener("mouseleave", () => {
+                            div.style.background = "rgba(255,255,255,0.03)";
+                            div.style.borderColor = "rgba(255,255,255,0.06)";
+                        });
+                        
+                        container.appendChild(div);
+                    });
+                } else {
+                    container.innerHTML = `<div style="font-size:0.9rem; color:#ef4444;">No trending topics found. Please try again.</div>`;
+                }
+            } catch (err) {
+                container.innerHTML = `<div style="font-size:0.9rem; color:#ef4444;">Error fetching trends: ${err.message}</div>`;
+            } finally {
+                isFetchingTrends = false;
             }
         }
     </script>
