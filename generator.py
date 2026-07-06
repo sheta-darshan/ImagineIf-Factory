@@ -133,7 +133,7 @@ async def brainstorm_trending_topics() -> list:
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
     prompt = """
-    Identify 5 highly active trending topics on YouTube, the internet, or global news today (specifically focusing on science, technology, space exploration, artificial intelligence, speculative futures, mystery, or interesting news).
+    Identify 5 highly active trending topics on YouTube, the internet, or global news today, SPECIFICALLY prioritizing high-RPM (high advertiser payout) topics that attract high-value audiences in Tier-1 countries (like USA, UK, Canada, Germany). Focus heavily on science breakthroughs, advanced technology, space exploration, artificial intelligence, speculative futures, quantum computing, or robotics.
     
     For each identified trending topic, create a corresponding "Imagine If" or "What If" storytelling concept tailored for our channel "Imagine If Factory". 
     
@@ -214,6 +214,42 @@ async def brainstorm_trending_topics() -> list:
                 "reason": "Deep sea discovery feeds curiosity and provides highly aesthetic visual opportunities for Flux."
             }
         ]
+
+async def translate_text(text: str, target_lang: str) -> str:
+    """
+    Translates the script narration text to the target language (e.g. German, French, Spanish, Japanese, Portuguese, Hindi) using Gemini.
+    Preserves all meaning, emotional tone, and sentence flow.
+    """
+    global client
+    if not client:
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        
+    prompt = f"""
+    Translate the following YouTube Shorts narration script into {target_lang}.
+    
+    CRITICAL TRANSLATION REQUIREMENTS:
+    1. Keep the translation natural, fluent, and highly engaging for a voiceover narration. Do not sound like a machine.
+    2. Maintain the same sentence count, emotional pacing, and structure of the original script.
+    3. Ensure the vocabulary remains at an easy, easy-to-understand reading level (approx. 5th-grade reading level in the target language).
+    
+    Original English Script:
+    {text}
+    
+    Respond only with the translated script. Do not add intro, outro, explanations, or quotes.
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        translated = response.text.strip()
+        if translated.startswith('"') and translated.endswith('"'):
+            translated = translated[1:-1]
+        return translated
+    except Exception as e:
+        print(f"Error translating text to {target_lang}: {e}")
+        return text
 
 async def generate_voiceover(text: str, output_path: str, voice: str = "en-US-GuyNeural", rate: str = "+0%", pitch: str = "+0Hz"):
     """

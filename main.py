@@ -61,6 +61,11 @@ class RenderRequest(BaseModel):
     addWatermark: bool = False
     captionPreset: str = "default"
 
+class TranslateProjectRequest(BaseModel):
+    projectId: str
+    targetLang: str
+    segments: List[Segment]
+
 class RegenerateSegmentRequest(BaseModel):
     projectId: str
     segmentIndex: int
@@ -152,6 +157,64 @@ async def api_trending_topics():
         return {"status": "success", "topics": topics}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/translate-project")
+async def api_translate_project(req: TranslateProjectRequest):
+    """
+    Translates all storyboard segment narrations to the target language,
+    updates the project metadata voice selection, and returns the translated storyboard.
+    """
+    project_id = req.projectId
+    project_dir = f"outputs/{project_id}"
+    meta_path = f"{project_dir}/metadata.json"
+    
+    lang_voice_map = {
+        "German": "de-DE-FlorianMultilingualNeural",
+        "French": "fr-FR-HenriNeural",
+        "Spanish": "es-ES-AlvaroNeural",
+        "Japanese": "ja-JP-KeitaNeural",
+        "Portuguese": "pt-BR-AntonioNeural",
+        "Hindi": "hi-IN-MadhurNeural"
+    }
+    target_voice = lang_voice_map.get(req.targetLang, "en-US-GuyNeural")
+    
+    async def translate_segment(seg: Segment):
+        translated_text = await generator.translate_text(seg.text_to_speak, req.targetLang)
+        return Segment(
+            text_to_speak=translated_text,
+            visual_prompt=seg.visual_prompt  # Visual prompt stays in English for Replicate
+        )
+        
+    try:
+        tasks = [translate_segment(seg) for seg in req.segments]
+        translated_segments = await asyncio.gather(*tasks)
+        
+        # Update metadata if it exists
+        if os.path.exists(meta_path):
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta["voice"] = target_voice
+            # Translate SEO Title and Description
+            meta["title"] = await generator.translate_text(meta.get("title", ""), req.targetLang)
+            meta["description"] = await generator.translate_text(meta.get("description", ""), req.targetLang)
+            if meta.get("thumbnail_text"):
+                meta["thumbnail_text"] = await generator.translate_text(meta["thumbnail_text"], req.targetLang)
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+                
+        return {
+            "status": "success",
+            "voice": target_voice,
+            "segments": [
+                {
+                    "text_to_speak": seg.text_to_speak,
+                    "visual_prompt": seg.visual_prompt
+                }
+                for seg in translated_segments
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
 
 @app.delete("/api/delete-project/{projectId}")
 async def api_delete_project(projectId: str):

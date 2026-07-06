@@ -664,6 +664,30 @@
                 <span style="font-size: 0.75rem; color: var(--text-muted);">Place your .mp3 music files inside <code>static/music/</code> to list them here.</span>
             </div>
 
+            <!-- Global Translation Studio Panel -->
+            <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color); padding:1.25rem; border-radius:12px; margin-bottom:2rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1.25rem;">
+                <div style="display:flex; align-items:center; gap:0.75rem; flex:1; min-width:280px;">
+                    <span style="font-size:1.5rem; filter:drop-shadow(0 2px 8px rgba(99,102,241,0.3));">🌐</span>
+                    <div>
+                        <h4 style="margin:0; font-family:'Outfit', sans-serif; font-size:0.95rem; color:white;">Global Translation Studio</h4>
+                        <p style="margin:0.25rem 0 0 0; font-size:0.75rem; color:var(--text-muted);">Translate script narration and SEO metadata to target high-RPM regional audiences in one click.</p>
+                    </div>
+                </div>
+                <div style="display:flex; gap:0.5rem; align-items:center;">
+                    <select id="translation-lang-select" style="margin-bottom:0; width:auto; padding:0.45rem 0.9rem; font-size:0.85rem; background:rgba(0,0,0,0.2); border-color:var(--border-color);">
+                        <option value="German">🇩🇪 German (de-DE)</option>
+                        <option value="French">🇫🇷 French (fr-FR)</option>
+                        <option value="Spanish">🇪🇸 Spanish (es-ES)</option>
+                        <option value="Japanese">🇯🇵 Japanese (ja-JP)</option>
+                        <option value="Portuguese">🇧🇷 Portuguese (pt-BR)</option>
+                        <option value="Hindi">🇮🇳 Hindi (hi-IN)</option>
+                    </select>
+                    <button class="btn" id="translate-project-btn" onclick="translateProject()" style="padding:0.45rem 0.9rem; font-size:0.8rem; background:var(--primary); color:white; width:auto; margin-bottom:0; box-shadow:none;">
+                        Translate Script <span class="spinner" style="display:none;" id="translate-btn-spinner"></span>
+                    </button>
+                </div>
+            </div>
+
             <div id="storyboard-list">
                 <!-- Segments will be inserted here dynamically -->
             </div>
@@ -1522,6 +1546,75 @@
                 container.innerHTML = `<div style="font-size:0.9rem; color:#ef4444;">Error fetching trends: ${err.message}</div>`;
             } finally {
                 isFetchingTrends = false;
+            }
+        async function translateProject() {
+            const select = document.getElementById("translation-lang-select");
+            const targetLang = select.value;
+            const btn = document.getElementById("translate-project-btn");
+            
+            // Gather current state from narration textareas to preserve manual edits
+            const narrations = document.querySelectorAll(".seg-narration");
+            narrations.forEach(textarea => {
+                const idx = parseInt(textarea.getAttribute("data-index"));
+                currentSegments[idx].text_to_speak = textarea.value.trim();
+            });
+
+            btn.disabled = true;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `Translating... <span class="spinner" id="translate-btn-spinner"></span>`;
+
+            try {
+                const response = await fetch("/api/translate-project", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        projectId: currentProjectId,
+                        targetLang: targetLang,
+                        segments: currentSegments
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || "Translation request failed");
+                }
+
+                const data = await response.json();
+                
+                // Update voice selector dropdown to match target language voice
+                const voiceSelect = document.getElementById("voice-select");
+                if (voiceSelect) {
+                    let optionExists = false;
+                    for (let i = 0; i < voiceSelect.options.length; i++) {
+                        if (voiceSelect.options[i].value === data.voice) {
+                            optionExists = true;
+                            break;
+                        }
+                    }
+                    if (!optionExists) {
+                        const newOpt = document.createElement("option");
+                        newOpt.value = data.voice;
+                        newOpt.innerText = `Regional Translated Voice (${data.voice})`;
+                        voiceSelect.appendChild(newOpt);
+                    }
+                    voiceSelect.value = data.voice;
+                }
+                
+                // Update script segments in currentSegments memory and textareas
+                currentSegments.forEach((seg, idx) => {
+                    seg.text_to_speak = data.segments[idx].text_to_speak;
+                    const textarea = document.querySelector(`.seg-narration[data-index="${idx}"]`);
+                    if (textarea) {
+                        textarea.value = seg.text_to_speak;
+                    }
+                });
+
+                alert(`Script successfully translated to ${targetLang}! Note: To compile the translated voiceover, click "Generate Voice & Images" (or regenerate audio on individual cards).`);
+            } catch (err) {
+                alert(`Error translating script: ${err.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
             }
         }
     </script>
