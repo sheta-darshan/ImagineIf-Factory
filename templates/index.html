@@ -880,9 +880,14 @@
                         
                         let actionButton = "";
                         if (proj.status === 'rendered') {
-                            actionButton = `<button class="btn" style="font-size:0.85rem; padding:0.5rem 1rem;" onclick="viewPastProject('${proj.projectId}')">Open Player</button>`;
+                            actionButton = `
+                                <button class="btn" style="font-size:0.8rem; padding:0.4rem 0.6rem; margin-bottom:0;" onclick="viewPastProject('${proj.projectId}')">Open Player</button>
+                                <button class="btn" style="font-size:0.8rem; padding:0.4rem 0.6rem; margin-bottom:0; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.25); color:#818cf8; box-shadow:none;" onclick="resumeProject('${proj.projectId}')">Edit</button>
+                            `;
                         } else {
-                            actionButton = `<span style="font-size:0.8rem; color:var(--text-muted);">Incomplete</span>`;
+                            actionButton = `
+                                <button class="btn" style="font-size:0.8rem; padding:0.4rem 0.8rem; margin-bottom:0; background:var(--accent); color:black;" onclick="resumeProject('${proj.projectId}')">Resume Draft ✍️</button>
+                            `;
                         }
                         
                         const deleteButton = `<button class="btn" style="font-size:0.85rem; padding:0.5rem 1rem; background:rgba(239, 68, 68, 0.2); color:#f87171; border:1px solid rgba(239, 68, 68, 0.3); box-shadow:none;" onclick="deleteProject('${proj.projectId}', event)">Delete</button>`;
@@ -938,6 +943,64 @@
                 }
             } catch (err) {
                 alert(`Error deleting project: ${err.message}`);
+            }
+        }
+        
+        function resumeProject(projectId) {
+            const proj = globalProjects[projectId];
+            if (!proj) return;
+            
+            currentProjectId = projectId;
+            
+            // Populate script/metadata elements back into form fields
+            document.getElementById("thought-input").value = proj.thought || "";
+            document.getElementById("duration-input").value = proj.duration || 30;
+            document.getElementById("style-select").value = proj.visualStyle || "Cinematic Photo";
+            document.getElementById("model-select").value = proj.imageModel || "schnell";
+            document.getElementById("voice-select").value = proj.voice || "en-US-GuyNeural";
+            document.getElementById("aspect-select").value = proj.aspectRatio || "16:9";
+            
+            // Populate segments
+            if (proj.segments && proj.segments.length > 0) {
+                currentSegments = proj.segments;
+                
+                // Render Step 2 storyboard editor
+                renderStoryboardEditor();
+                
+                // Show compile button if we have segments
+                document.getElementById("render-video-btn").style.display = "inline-block";
+                
+                // Check if any segment has already generated images/audio and load them
+                setTimeout(() => {
+                    currentSegments.forEach((seg, idx) => {
+                        const prevDiv = document.getElementById(`preview-${idx}`);
+                        const visualContainer = document.getElementById(`visual-prev-container-${idx}`);
+                        const aud = document.getElementById(`aud-prev-${idx}`);
+                        
+                        if (seg.audio_path || seg.image_path) {
+                            if (seg.audio_path) {
+                                aud.src = `/${seg.audio_path}?t=${new Date().getTime()}`;
+                            }
+                            if (seg.image_path) {
+                                if (seg.image_path.toLowerCase().endsWith(".mp4")) {
+                                    visualContainer.innerHTML = `<video src="/${seg.image_path}?t=${new Date().getTime()}" controls style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"></video>`;
+                                } else {
+                                    visualContainer.innerHTML = `<img src="/${seg.image_path}?t=${new Date().getTime()}" id="img-prev-${idx}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">`;
+                                }
+                            }
+                            if (prevDiv) {
+                                prevDiv.style.display = "grid";
+                            }
+                        }
+                    });
+                }, 100);
+                
+                // Navigate to Step 2!
+                goToStep(2);
+            } else {
+                // If there are no segments, go to Step 1 and let them generate storyboard script
+                goToStep(1);
+                alert("This draft project does not have script segments saved yet. Click 'Generate Storyboard' to begin creating segments.");
             }
         }
         

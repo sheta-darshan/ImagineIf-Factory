@@ -264,7 +264,8 @@ async def api_generate_script(req: ScriptRequest):
             "duration": req.duration,
             "visualStyle": req.visual_style,
             "imageModel": req.imageModel,
-            "voice": req.voice
+            "voice": req.voice,
+            "segments": data.get("segments", [])
         }
         with open(f"outputs/{project_id}/metadata.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
@@ -308,6 +309,15 @@ async def api_generate_assets(req: AssetRequest):
             meta["aspectRatio"] = req.aspectRatio
             meta["status"] = "assets_generated"
             meta["imageModel"] = req.imageModel
+            meta["segments"] = [
+                {
+                    "text_to_speak": seg.text_to_speak,
+                    "visual_prompt": seg.visual_prompt,
+                    "audio_path": seg.audio_path,
+                    "image_path": seg.image_path
+                }
+                for seg in req.segments
+            ]
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=2)
         except Exception as e:
