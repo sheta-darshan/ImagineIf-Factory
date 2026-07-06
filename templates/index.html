@@ -1547,6 +1547,8 @@
             } finally {
                 isFetchingTrends = false;
             }
+        }
+
         async function translateProject() {
             const select = document.getElementById("translation-lang-select");
             const targetLang = select.value;
@@ -1603,6 +1605,8 @@
                 // Update script segments in currentSegments memory and textareas
                 currentSegments.forEach((seg, idx) => {
                     seg.text_to_speak = data.segments[idx].text_to_speak;
+                    seg.audio_path = data.segments[idx].audio_path;
+                    seg.image_path = data.segments[idx].image_path;
                     const textarea = document.querySelector(`.seg-narration[data-index="${idx}"]`);
                     if (textarea) {
                         textarea.value = seg.text_to_speak;

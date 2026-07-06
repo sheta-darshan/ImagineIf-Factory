@@ -182,7 +182,9 @@ async def api_translate_project(req: TranslateProjectRequest):
         translated_text = await generator.translate_text(seg.text_to_speak, req.targetLang)
         return Segment(
             text_to_speak=translated_text,
-            visual_prompt=seg.visual_prompt  # Visual prompt stays in English for Replicate
+            visual_prompt=seg.visual_prompt,  # Visual prompt stays in English for Replicate
+            audio_path=seg.audio_path,
+            image_path=seg.image_path
         )
         
     try:
@@ -208,7 +210,9 @@ async def api_translate_project(req: TranslateProjectRequest):
             "segments": [
                 {
                     "text_to_speak": seg.text_to_speak,
-                    "visual_prompt": seg.visual_prompt
+                    "visual_prompt": seg.visual_prompt,
+                    "audio_path": seg.audio_path,
+                    "image_path": seg.image_path
                 }
                 for seg in translated_segments
             ]
