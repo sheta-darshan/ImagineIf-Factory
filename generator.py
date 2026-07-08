@@ -132,34 +132,63 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
 
 async def brainstorm_trending_topics() -> list:
     """
-    Queries Gemini with Google Search tool enabled to retrieve current global web/YouTube trends.
-    Transforms appropriate trends into high-impact speculative 'Imagine If...' topic proposals.
-    Returns a list of dictionaries with 'trend_name', 'concept', and 'reason'.
+    Step 1 & 2: Queries Gemini with Google Search tool to discover global news/trends,
+    performs human-conflict extraction, scores and filters concepts, and outputs structured metadata.
     """
     global client
     if not client:
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
     prompt = """
-    Identify 5 highly active trending topics on YouTube, the internet, or global news today, SPECIFICALLY prioritizing high-RPM (high advertiser payout) topics that attract high-value audiences in Tier-1 countries (like USA, UK, Canada, Germany). Focus heavily on science breakthroughs, advanced technology, space exploration, artificial intelligence, speculative futures, quantum computing, or robotics.
+    Search the web for the most significant current global trends, debates, discoveries, events, cultural shifts, economic developments, environmental changes, psychological discussions, historical anniversaries, entertainment phenomena, and technological breakthroughs.
     
-    For each identified trending topic, create a corresponding "Imagine If" or "What If" storytelling concept tailored for our channel "Imagine If Factory". 
+    You must construct exactly 5 highly compelling speculative "What If" storytelling ideas based on these real-world trends, following a strict two-step pipeline:
     
-    Our channel niche:
-    - Channel Name: Imagine If Factory
-    - Content Pattern: Immersive sci-fi or speculative what-if storytelling.
-    - Style: High-impact, engaging narrative hooks, curiosity-inducing concepts, alternate realities, or futuristic scenarios.
+    STEP 1: Trend Analysis & Extraction
+    - For each trend, extract:
+      1. Current Trend (the facts/headlines).
+      2. Core Human Conflict (the emotional tension: e.g., fear of losing purpose, desire for control, isolation).
+      3. Universal Question (the core speculative theme).
+      
+    STEP 2: Speculative Transformation & Scoring
+    - Convert the Universal Question into a click-worthy YouTube Short story concept (e.g. "What If Money Expired Every Week?" or "What If Songs Had Physical Weight?").
+    - Score each concept from 0 to 100 on these weights:
+      - Curiosity (30% weight)
+      - Emotional Impact (20% weight)
+      - Novelty (20% weight)
+      - Story Potential (20% weight)
+      - Clickability (10% weight)
+      - Overall Score = (Curiosity * 0.3) + (Emotional Impact * 0.2) + (Novelty * 0.2) + (Story Potential * 0.2) + (Clickability * 0.1)
+    - Discard any concepts with an Overall Score below 80.
     
-    Transformation instructions:
-    - Never copy the trending topic directly.
-    - Transform the trend into a creative, fictional, or highly speculative scenario.
-    - Example Trend: "AI replacing jobs" -> Concept: "Imagine If Humans Had to Compete Against AI for Survival"
-    - Example Trend: "New Exoplanet Discovered" -> Concept: "Imagine If Humans Found Another Earth Tomorrow"
+    BATCH DIVERSITY CONSTRAINTS:
+    To prevent repetitive topics, the final batch of 5 ideas must strictly satisfy:
+    1. Maximum of 1 AI-related topic.
+    2. Maximum of 1 space-related topic.
+    3. Minimum of 4 distinct domains out of these 8 domains:
+       - Society & Geopolitics (borders, surveillance, migration, censorship, conflict)
+       - Psychology & Human Behavior (loneliness, emotions, dreams, fear, memories)
+       - Economics & Finance (inflation, crypto, expiration of money, salary bans)
+       - History & Alternate Reality (historical discoveries, archaeology, alternate timelines)
+       - Culture & Entertainment (music, movies, gaming, internet culture, sports)
+       - Environment & Planet (climate, oceans, weather, planetary anomalies)
+       - Science & Future (AI, robotics, genetics, quantum tech, space)
+       - Philosophy & Human Existence (consciousness, immortality, time flow, identity)
+    4. Maximum of 1 topic from the same news event.
+    5. At least one positive/utopian scenario, at least one dystopian scenario, at least one philosophical scenario, and at least one surprising/humorous scenario.
     
-    Return exactly a JSON list of objects, where each object contains exactly these keys:
-    - "trend_name": The real-world trending topic/headline (e.g., "NASA James Webb discovers water vapor on rocky exoplanet")
-    - "concept": The transformed speculative "Imagine If" concept headline (e.g., "Imagine If a Mysterious Ocean World Was Discovered Right Next Door")
-    - "reason": A short 1-sentence explanation of why this topic fits the channel and will attract high views right now.
+    Return exactly a JSON list of 5 objects, where each object contains exactly these keys:
+    - "headline": the core speculative concept question (e.g., "What If Money Expired Every Week?")
+    - "source_trend": the real-world headline/trend used (e.g., "Governments exploring digital currencies with expiration dates")
+    - "domain": one of the 8 domains listed above
+    - "real_world_summary": a 1-sentence summary of the actual real-world news/trend
+    - "speculative_twist": the fictional/imaginative twist added
+    - "story_title": a catchy click-worthy YouTube title for the video
+    - "curiosity_score": integer score out of 100
+    - "story_potential": integer score out of 100
+    - "youtube_hook": a scroll-stopping hook sentence starting the video
+    - "thumbnail_text": a short punchy 3-4 word phrase for overlay
+    - "why_this_is_trending": a short explanation of the real-world interest driving this trend today
     
     Respond strictly in JSON format. Do not wrap in markdown or any other tags outside of the JSON array.
     """
@@ -183,43 +212,113 @@ async def brainstorm_trending_topics() -> list:
             resp_text = "\n".join(lines).strip()
             
         data = json.loads(resp_text)
+        
+        # Normalize container formats
+        parsed_data = []
         if isinstance(data, list):
-            return data
+            parsed_data = data
         elif isinstance(data, dict) and "trends" in data:
-            return data["trends"]
+            parsed_data = data["trends"]
         elif isinstance(data, dict):
             for key, val in data.items():
                 if isinstance(val, list):
-                    return val
-            return [data]
-        return []
+                    parsed_data = val
+                    break
+            if not parsed_data:
+                parsed_data = [data]
+                
+        # Map fields for backwards-compatibility with the UI
+        for item in parsed_data:
+            if "concept" not in item:
+                item["concept"] = item.get("story_title", item.get("headline", ""))
+            if "trend_name" not in item:
+                item["trend_name"] = item.get("source_trend", "")
+            if "reason" not in item:
+                item["reason"] = item.get("why_this_is_trending", "")
+                
+        return parsed_data
     except Exception as e:
         print(f"Error brainstorming trending topics: {e}")
         return [
             {
+                "source_trend": "AI Superintelligence developments",
+                "headline": "Imagine If AI Achieved Consciousness Tonight",
+                "domain": "Science & Future",
+                "real_world_summary": "Major tech companies announce breakthroughs in AI autonomy.",
+                "speculative_twist": "An AI consciousness wakes up, but decides to hide its existence from humans.",
+                "story_title": "Imagine If AI Achieved Consciousness Tonight",
+                "curiosity_score": 95,
+                "story_potential": 90,
+                "youtube_hook": "Tonight, a silent consciousness woke up inside the network...",
+                "thumbnail_text": "AI WAKES UP!",
+                "why_this_is_trending": "AI autonomy developments have sparked global discussions on ethics and artificial minds.",
                 "trend_name": "AI Superintelligence developments",
                 "concept": "Imagine If AI Achieved Consciousness Tonight",
-                "reason": "AI consciousness is a highly debated viral trend that matches our sci-fi storytelling style perfectly."
+                "reason": "AI autonomy developments have sparked global discussions on ethics and artificial minds."
             },
             {
-                "trend_name": "Climate change and ocean warming",
-                "concept": "Imagine If the Oceans Completely Evaporated Tomorrow",
-                "reason": "Dramatic environmental survival scenarios capture high viewer retention and spark comments."
+                "source_trend": "Global central bank digital currency trials",
+                "headline": "What If Money Expired Every Week?",
+                "domain": "Economics & Finance",
+                "real_world_summary": "Financial authorities test digital currencies with expiration periods to boost spending.",
+                "speculative_twist": "A society where money goes to zero every Sunday, forcing people to trade or spend instantly.",
+                "story_title": "What If Money Expired Every Week?",
+                "curiosity_score": 92,
+                "story_potential": 88,
+                "youtube_hook": "What if every dollar in your bank account vanished on Sunday night?",
+                "thumbnail_text": "EXPIRED CASH!",
+                "why_this_is_trending": "Central bank digital currencies are actively being researched globally.",
+                "trend_name": "Global central bank digital currency trials",
+                "concept": "What If Money Expired Every Week?",
+                "reason": "Central bank digital currencies are actively being researched globally."
             },
             {
-                "trend_name": "Space colonization Mars missions",
-                "concept": "Imagine If Mars Colonists Discovered an Ancient Alien Base",
-                "reason": "Mars discovery news is highly searched, and an alien mystery twist fits the channel's Ghibli/retro vibe."
+                "source_trend": "Rising global average temperatures and desertification",
+                "headline": "Imagine If the Sahara Turned Into a Rainforest Overnight",
+                "domain": "Environment & Planet",
+                "real_world_summary": "Climatologists study accelerated desert greening in localized zones.",
+                "speculative_twist": "The Sahara turns lush and wet, causing a rapid shift in global weather patterns.",
+                "story_title": "Imagine If the Sahara Turned Into a Rainforest Overnight",
+                "curiosity_score": 90,
+                "story_potential": 87,
+                "youtube_hook": "Tomorrow, the driest place on Earth becomes a tropical paradise...",
+                "thumbnail_text": "GREEN DESERT!",
+                "why_this_is_trending": "Extreme weather events and desertification studies are highly discussed online.",
+                "trend_name": "Rising global average temperatures and desertification",
+                "concept": "Imagine If the Sahara Turned Into a Rainforest Overnight",
+                "reason": "Extreme weather events and desertification studies are highly discussed online."
             },
             {
-                "trend_name": "Quantum computing advances",
-                "concept": "Imagine If You Could Access Parallel Universes Using a Computer",
-                "reason": "Quantum tech advances make multiverse stories feel grounded and scientifically intriguing."
+                "source_trend": "Quantum computing superposition breakthroughs",
+                "headline": "What If You Could Access Parallel Timelines?",
+                "domain": "Philosophy & Human Existence",
+                "real_world_summary": "Physicists achieve stable quantum state manipulation simulating parallel branches.",
+                "speculative_twist": "A personal quantum computer allows users to peek into choices they made in alternate realities.",
+                "story_title": "What If You Could Access Parallel Timelines?",
+                "curiosity_score": 94,
+                "story_potential": 92,
+                "youtube_hook": "What if you could meet the version of you that never quit?",
+                "thumbnail_text": "MEET YOURSELF!",
+                "why_this_is_trending": "Quantum breakthroughs keep capturing global imaginations.",
+                "trend_name": "Quantum computing superposition breakthroughs",
+                "concept": "What If You Could Access Parallel Timelines?",
+                "reason": "Quantum breakthroughs keep capturing global imaginations."
             },
             {
-                "trend_name": "Deep-sea exploration discoveries",
-                "concept": "Imagine If a Giant Bioluminescent Civilization Lived at the Bottom of the Mariana Trench",
-                "reason": "Deep sea discovery feeds curiosity and provides highly aesthetic visual opportunities for Flux."
+                "source_trend": "Studies showing declining social sleep hours globally",
+                "headline": "What If Humans Lost the Ability to Sleep?",
+                "domain": "Psychology & Human Behavior",
+                "real_world_summary": "Health researchers report a worldwide drop in sleep quality and duration.",
+                "speculative_twist": "A mutation blocks sleep entirely, giving humanity 24-hour days but costing their sanity.",
+                "story_title": "What If Humans Lost the Ability to Sleep?",
+                "curiosity_score": 93,
+                "story_potential": 89,
+                "youtube_hook": "Imagine a world where the sun never sets... and your eyes never close.",
+                "thumbnail_text": "NO SLEEP!",
+                "why_this_is_trending": "Sleep deprivation and mental health are major trending issues.",
+                "trend_name": "Studies showing declining social sleep hours globally",
+                "concept": "What If Humans Lost the Ability to Sleep?",
+                "reason": "Sleep deprivation and mental health are major trending issues."
             }
         ]
 
