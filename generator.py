@@ -42,15 +42,23 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
     chosen_style = style_guidelines.get(visual_style, style_guidelines["Cinematic Photo"])
 
     prompt = f"""
-    You are an expert director, visual storyteller, and YouTube growth marketer.
+    You are an expert cinematic director, speculative sci-fi storyteller, and high-retention short-form video scriptwriter.
     Break down the following thought/topic into a sequence of short video segments for a video around {duration_seconds} seconds long.
     Each segment must last approximately 5 to 10 seconds (roughly 15 to 25 words of spoken narration per segment).
     The narration should flow naturally as a single continuous script.
     
-    CRITICAL ENGAGEMENT AND STRUCTURE REQUIREMENTS:
-    1. Hook (Segment 1): Must begin with an immediate, high-retention hook (an intriguing, polarising, or curiosity-inducing question that stops the scroll).
-    2. Close (Final Segment): Must end with a compelling, open-ended question that drives comments, paired with a call to action asking the viewer to share/tag a friend.
-    3. Language: Write the spoken narration (`text_to_speak`) in very simple, clear, and easy-to-understand English (approx. 5th-grade reading level). Keep sentences short and direct.
+    CRITICAL HIGH-RETENTION STORYTELLING GUIDELINES:
+    1. Hook (Segment 1 - 0 to 5s): Start "in media res" (in the middle of the action/consequences) with an immediate, scroll-stopping, dramatic statement or paradox.
+       - BANNED CLICHÉS: Never start with "Have you ever wondered...", "Imagine a world...", "What if...", "In this video...", or greeting the audience.
+       - Good Hook Example: "Tomorrow morning, every computer on Earth shuts down... permanently."
+    2. Stakes / Promise (Segment 2 - 5 to 10s): Establish the global stakes or rules of this speculative scenario immediately. Make the viewer feel the scale of the threat or wonder.
+    3. Sensory & Punchy Body Narrations:
+       - Keep sentences short, active, and direct. Break up long ideas.
+       - Use highly sensory vocabulary (e.g. "metallic tang", "deafening hum", "freezing shadow", "shivering steel"). Describe feelings, sounds, and visuals.
+       - Use expressive punctuation like ellipses `...` or em-dashes `—` to force dramatic voiceover pauses in the Edge-TTS synthesis.
+    4. Cliffhanger Loops: Every segment except the final one must end with a brief cliffhanger or unresolved statement that forces the viewer's brain to slide into the next segment.
+    5. The Polarizing Payoff (Final Segment): Deliver a final punchy takeaway. End with a highly debate-inducing, open-ended question designed to spark disagreements and discussions in the comment section.
+       - Good Payoff Example: "If you had to choose... would you go underground, or take your chances on the surface? Comment below."
     
     Provide highly detailed, specific visual prompts for each segment that will be fed into an AI visual generator.
 
@@ -64,7 +72,7 @@ async def generate_script(thought: str, duration_seconds: int = 60, visual_style
       "thumbnail_text": "A short, extremely punchy, high-curiosity 3 to 4 word phrase to overlay on the thumbnail in bold uppercase letters (e.g., 'TIME RAN OUT!', 'GRAVITY FAILS!', 'DON'T CLICK!'). Keep it short and dramatic.",
       "segments": [
          {{
-           "text_to_speak": "spoken narration text for this segment, written in simple and clear English",
+           "text_to_speak": "spoken narration text for this segment, written in simple, dramatic English with pauses",
            "visual_prompt": "An expanded, highly detailed cinematic visual prompt. Describe the specific scene composition, professional camera angles, detailed lighting parameters (e.g. volumetric rays, rim lighting, soft dramatic shadows), lens settings (e.g. shallow depth of field, macro details), color grading, and dynamic motion descriptors (e.g. slow-motion camera sweep, steam rising, wind blowing, dust particles drifting). Do not just state a style; paint it with rich descriptive modifiers for maximum visual generation fidelity."
          }}
       ]
